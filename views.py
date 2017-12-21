@@ -103,46 +103,87 @@ class AbstractUser(AbstractBaseUser, PermissionsMixin):
 
 def create(request):
     if request.method == 'POST':
+
         form = UserCreateForm(request.POST)
+
         username = form.data['username']
-        match_username = re.match('^[a-zA-Z0-9._]+$', username)
         email = form.data['email']
-        match_email = re.match('[^@]+@[^@]+\.[^@]+', email)
         password = form.data['password']
         password_confirm = form.data['password_confirm']
 
+        match_username = re.match('^[a-zA-Z0-9._]+$', username)
+        match_email = re.match('[^@]+@[^@]+\.[^@]+', email)
+
         if not match_username:
-            return JsonResponse({'result': 'false', 'username': username, 'email': email, 'password': password, 'password_confirm': password_confirm})
+            data = {
+                'username': username,
+                'email': email,
+            }
+            wrong = {'message': 'It\'s unavailable username'}
+            form = UserCreateForm(data)
+            return render(request, 'renoauth/create.html', {'form': form, 'wrong': wrong})
         if len(username) > 30:
-            return JsonResponse({'result': 'Too many', 'password': password})
+            data = {
+                'username': username,
+                'email': email,
+            }
+            wrong = {'message': 'username cannot over 30 characters'}
+            form = UserCreateForm(data)
+            return render(request, 'renoauth/create.html', {'form': form, 'wrong': wrong})
         if not match_email:
-            return JsonResponse({'result': len(email)})
+            data = {
+                'username': username,
+                'email': email,
+            }
+            wrong = {'message': 'It\'s unavailable email'}
+            form = UserCreateForm(data)
+            return render(request, 'renoauth/create.html', {'form': form, 'wrong': wrong})
         if len(email) > 255:
-            return JsonResponse({'result': 'Too long'})
+            data = {
+                'username': username,
+                'email': email,
+            }
+            wrong = {'message': 'email cannot over 255 characters'}
+            form = UserCreateForm(data)
+            return render(request, 'renoauth/create.html', {'form': form, 'wrong': wrong})
         if not password == password_confirm:
-            return JsonResponse({'result': 'Password is not the same'})
+            data = {
+                'username': username,
+                'email': email,
+            }
+            wrong = {'message': 'both passwords you submitted are not the same'}
+            form = UserCreateForm(data)
+            return render(request, 'renoauth/create.html', {'form': form, 'wrong': wrong})
         if len(password) > 128:
-            return JsonResponse({'result': 'Password is too long'})
+            data = {
+                'username': username,
+                'email': email,
+            }
+            wrong = {'message': 'password is too long'}
+            form = UserCreateForm(data)
+            return render(request, 'renoauth/create.html', {'form': form, 'wrong': wrong})
 
         if form.is_valid():
-            new_user = User.objects.create_user(
-                username=form.cleaned_data['username'], password=form.cleaned_data['password'],
-                email=form.cleaned_data['email']
+
+            user_new = User.objects.create_user(
+                username=form.cleaned_data['username'],
+                email=form.cleaned_data['email'],
+                password=form.cleaned_data['password'],
             )
-            login(request, new_user)
-            submit_data = {
-                'username': username, 'email': email, 'password': password, 'password_confirm':password_confirm
-            }
-            return JsonResponse(submit_data)
+
+            login(request, user_new)
+
+            return redirect('/talk/')
         else:
+            data = {
+                'username': username,
+                'email': email,
+            }
+            form = UserCreateForm(data)
             wrong = {'message': 'There is something wrong'}
             return render(request, 'renoauth/create.html', {'form': form, 'wrong': wrong})
     else:
-        data = {
-            'username': 'Hedddo',
-            'email': 'tnalfkdtprtm@gkfrjdi.gksek'
-        }
-        form = UserCreateForm(data)
+        form = UserCreateForm()
         return render(request, 'renoauth/create.html', {'form': form})
 
 
@@ -166,10 +207,10 @@ def log_in(request):
         user = authenticate(username=username, password=password)
         if user is not None:
             login(request, user)
-            userna = user.username
+            username = user.username
             useremail = user.email
             userpass = user.password
-            return HttpResponse('/logincheck/'+userna+'<br>'+useremail+'<br>'+userpass)
+            return HttpResponse('/logincheck/'+username+'<br>'+useremail+'<br>'+userpass)
         else:
             return HttpResponse('로그인실패')
     else:
