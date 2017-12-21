@@ -111,16 +111,19 @@ def create(request):
         password = form.data['password']
         password_confirm = form.data['password_confirm']
 
-        what = len(username)
         if not match_username:
-            return JsonResponse({'result': 'false', 'username': what, 'email': email, 'password': password, 'password_confirm': password_confirm})
+            return JsonResponse({'result': 'false', 'username': username, 'email': email, 'password': password, 'password_confirm': password_confirm})
         if len(username) > 30:
-            return JsonResponse({'result': 'Too many'})
+            return JsonResponse({'result': 'Too many', 'password': password})
         if not match_email:
             return JsonResponse({'result': len(email)})
-        if len(email) > 254:
+        if len(email) > 255:
             return JsonResponse({'result': 'Too long'})
-        
+        if not password == password_confirm:
+            return JsonResponse({'result': 'Password is not the same'})
+        if len(password) > 128:
+            return JsonResponse({'result': 'Password is too long'})
+
         if form.is_valid():
             new_user = User.objects.create_user(
                 username=form.cleaned_data['username'], password=form.cleaned_data['password'],
