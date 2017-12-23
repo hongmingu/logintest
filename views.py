@@ -12,10 +12,15 @@ from django.core.exceptions import ValidationError
 from django.core.validators import validate_email
 from django.contrib.auth import get_user_model
 from django.conf import settings
-from .utils import make_id
+from .utils import *
+from .token import *
+from django.utils.encoding import force_bytes
+from django.utils.http import urlsafe_base64_encode
+from django.template.loader import render_to_string
+from django.db import IntegrityError
+from django.contrib.sites.shortcuts import get_current_site
 
 # Create your models here.
-
 
 
 def emailsignin(request):
@@ -190,7 +195,7 @@ def create(request):
                 status=0,
             )
 
-            UserSubEmail.objects.create(
+            user_sub_email = UserSubEmail.objects.create(
                 user_extension=user_extension,
                 email=form.cleaned_data['email'],
                 status=0,
@@ -200,10 +205,46 @@ def create(request):
                 username=form.cleaned_data['username'],
                 status=0,
             )
+            result = None
+            while result is None:
+                try:
+                    uid = urlsafe_base64_encode(force_bytes(user_create.pk))
+                    token = account_activate_token.make_token(user_create)
+
+                    UserAuthToken.objects.create(
+                        email=user_sub_email,
+                        uid=uid,
+                        token=token,
+                    )
+                    result = 1
+                except IntegrityError as e:
+                    if 'unique constraint' in e.message:
+                        pass
+                    else:
+                        wrong = {'message': 'Some Bug occurred'}
+                        render(request, 'error.html', wrong)
+
+            current_site = get_current_site(request)
+            subject = 'Activate Your MySite Account'
+
+            '''
+            user = form.save(commit=False)
+            user.is_active = False
+            user.save()
+            '''
+
+            message = render_to_string('account_activation_email.html', {
+                'user': user_create,
+                'domain': current_site.domain,
+                'uid': uid,
+                'token': token,
+            })
+            user_create.email_user(subject, message)
 
             login(request, user_create)
 
-            return redirect('/talk/')
+            return redirect('account_activation_sent')
+
         else:
             data = {
                 'username': username,
