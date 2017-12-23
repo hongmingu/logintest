@@ -63,11 +63,9 @@ class UserSubEmail(models.Model):
 
 
 @python_2_unicode_compatible
-class AuthToken(models.Model):
+class UserAuthToken(models.Model):
 
-    user_extension = models.ForeignKey(UserSubEmail)
-
-    email = models.EmailField()
+    email = models.ForeignKey(UserSubEmail)
 
     uid = models.CharField(max_length=64)
     token = models.CharField(max_length=34, unique=True)
