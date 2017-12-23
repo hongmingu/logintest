@@ -1,5 +1,6 @@
 from django.conf.urls import url
-from .views import *
+from renoauth import views
+
 
 urlpatterns = [
     url(r'^$', views.accounts, name='renoauth/accounts'),
@@ -8,6 +9,11 @@ urlpatterns = [
     url(r'^create/email/confirm/$', views.create_email_confirm, name='renoauth/create_email_confirm'),
     url(r'^create/email/confirm/key/(?P<uidb36>[0-9A-Za-z]+)-(?P<key>.+)/$', views.create_email_confirm_key,
         name='renoauth/create_email_confirm_key'),
+
+    url(r'^activate/(?P<uidb64>[0-9A-Za-z_\-]+)/(?P<token>[0-9A-Za-z]{1,13}-[0-9A-Za-z]{1,20})/$',
+        views.create_email_confirm, name='activate'),
+
+
     url(r'^create/done/$', views.create_done, name='renoauth/create_done'),
 
     url(r'^login/$', views.log_in, name='renoauth/log_in'),

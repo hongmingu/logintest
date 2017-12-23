@@ -1,5 +1,6 @@
 from django.shortcuts import render
 from .forms import UserCreateForm, LoginForm
+from .models import *
 from django.contrib.auth.models import User
 from django.contrib.auth import login, authenticate, logout
 from django.shortcuts import redirect, render
@@ -7,6 +8,14 @@ from django.http import HttpResponse, JsonResponse
 from django.views.decorators.csrf import ensure_csrf_cookie
 from django.core.mail import EmailMessage
 import re
+from django.core.exceptions import ValidationError
+from django.core.validators import validate_email
+from django.contrib.auth import get_user_model
+from django.conf import settings
+from .utils import make_id
+
+# Create your models here.
+
 
 
 def emailsignin(request):
@@ -113,6 +122,7 @@ def create(request):
 
         match_username = re.match('^[a-zA-Z0-9._]+$', username)
         match_email = re.match('[^@]+@[^@]+\.[^@]+', email)
+        validate_email(email)
 
         if not match_username:
             data = {
@@ -138,6 +148,7 @@ def create(request):
             wrong = {'message': 'It\'s unavailable email'}
             form = UserCreateForm(data)
             return render(request, 'renoauth/create.html', {'form': form, 'wrong': wrong})
+
         if len(email) > 255:
             data = {
                 'username': username,
@@ -146,6 +157,7 @@ def create(request):
             wrong = {'message': 'email cannot over 255 characters'}
             form = UserCreateForm(data)
             return render(request, 'renoauth/create.html', {'form': form, 'wrong': wrong})
+
         if not password == password_confirm:
             data = {
                 'username': username,
@@ -165,13 +177,31 @@ def create(request):
 
         if form.is_valid():
 
-            user_new = User.objects.create_user(
-                username=form.cleaned_data['username'],
-                email=form.cleaned_data['email'],
+            id_number = make_id()
+
+            user_create = User.objects.create_user(
+                username=id_number,
                 password=form.cleaned_data['password'],
+                is_active=False,
             )
 
-            login(request, user_new)
+            user_extension = UserExtension.objects.create(
+                user=user_create,
+                status=0,
+            )
+
+            UserSubEmail.objects.create(
+                user_extension=user_extension,
+                email=form.cleaned_data['email'],
+                status=0,
+            )
+            UserSubUsername.objects.create(
+                user_extension=user_extension,
+                username=form.cleaned_data['username'],
+                status=0,
+            )
+
+            login(request, user_create)
 
             return redirect('/talk/')
         else:
@@ -210,7 +240,7 @@ def log_in(request):
             username = user.username
             useremail = user.email
             userpass = user.password
-            return HttpResponse('/logincheck/'+username+'<br>'+useremail+'<br>'+userpass)
+            return HttpResponse('유저이름'+username+'유저이메일'+useremail+'유저비밀번호'+userpass)
         else:
             return HttpResponse('로그인실패')
     else:
