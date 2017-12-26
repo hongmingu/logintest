@@ -20,20 +20,6 @@ class UserExtension(models.Model):
 
 
 @python_2_unicode_compatible
-class UserIDNumber(models.Model):
-
-    user_extension = models.ForeignKey(UserExtension)
-
-    id_number = models.CharField(max_length=30, unique=True)
-
-    status = models.PositiveSmallIntegerField(default=0)
-    created = models.DateTimeField(auto_now_add=True)
-
-    def __str__(self):
-        return "UserIDNumber for %s" % self.user_extension
-
-
-@python_2_unicode_compatible
 class UserSubUsername(models.Model):
 
     user_extension = models.ForeignKey(UserExtension)

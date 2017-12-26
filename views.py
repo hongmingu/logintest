@@ -30,26 +30,9 @@ from renoauth import messages
 # Create your models here.
 
 
-def emailsignin(request):
-    if request.method == 'POST':
-        form = LoginForm(request.POST)
-        username = request.POST['username']
-        password = request.POST['password']
-        user = authenticate(username=username, password=password)
-        if user is not None:
-
-
-            login(request, user)
-            return JsonResponse({'hello': 'emailcheck'})
-        else:
-            return HttpResponse('로그인실패')
-    else:
-        form = LoginForm()
-        return render(request, 'signin.html', {'form':form})
-
-
 def accounts(request):
     return render(request, 'renoauth/accounts.html')
+
 
 '''
 password = models.CharField(_('password'), max_length=128)
@@ -121,6 +104,12 @@ class AbstractUser(AbstractBaseUser, PermissionsMixin):
         send_mail(subject, message, from_email, [self.email], **kwargs)
 '''
 
+'''
+user = form.save(commit=False)
+user.is_active = False
+user.save()
+'''
+
 
 def create(request):
     if request.method == 'POST':
@@ -185,6 +174,14 @@ def create(request):
             wrong = {'message': messages.PASSWORD_OVER_128}
             form = UserCreateForm(data)
             return render(request, 'renoauth/create.html', {'form': form, 'wrong': wrong})
+        if username == password:
+            data = {
+                'username': username,
+                'email': email,
+            }
+            wrong = {'message': messages.PASSWORD_EQUAL_USERNAME}
+            form = UserCreateForm(data)
+            return render(request, 'renoauth/create.html', {'form': form, 'wrong': wrong})
 
         if form.is_valid():
 
@@ -200,7 +197,7 @@ def create(request):
                     )
                     user_extension = UserExtension.objects.create(
                         user=user_create,
-                        status=numbers.USER_EXTENSION_USING,
+                        status=numbers.USER_EXTENSION_USING_UNVERIFIED,
                     )
                     check_username_result = 1
                 except IntegrityError as e:
@@ -221,7 +218,7 @@ def create(request):
                 user_sub_email = UserSubEmail.objects.create(
                     user_extension=user_extension,
                     email=form.cleaned_data['email'],
-                    status=numbers.USER_SUB_EMAIL_NOT_VERIFIED,
+                    status=numbers.USER_SUB_EMAIL_UNVERIFIED,
                 )
             else:
                 data = {
@@ -274,12 +271,6 @@ def create(request):
             current_site = get_current_site(request)
             subject = '[' + current_site.domain + ']' + messages.EMAIL_CONFIRMATION_SUBJECT
 
-            '''
-            user = form.save(commit=False)
-            user.is_active = False
-            user.save()
-            '''
-
             message = render_to_string('renoauth/account_activation_email.html', {
                 'user': user_create,
                 'domain': current_site.domain,
@@ -290,7 +281,7 @@ def create(request):
 
             login(request, user_create)
 
-            return redirect('account_activation_sent')
+            return redirect('/create/done/')
 
         else:
             data = {
@@ -321,7 +312,7 @@ def create_recaptcha(request):
         if not result['success']:
             return HttpResponse('reCAPTCHA 실패'+'<br>'+recaptcha_response)
 
-        return HttpResponse('reCAPTCHA'+'<br>'+recaptcha_response)
+        return redirect('/accounts/done/')
     else:
         return render(request, 'renoauth/reCAPTCHA.html')
 
