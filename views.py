@@ -9,7 +9,6 @@ from django.views.decorators.csrf import ensure_csrf_cookie
 from django.core.mail import EmailMessage
 import re
 from django.core.exceptions import ValidationError
-from django.core.validators import validate_email
 from django.contrib.auth import get_user_model
 from django.conf import settings
 from .utils import *
@@ -19,6 +18,14 @@ from django.utils.http import urlsafe_base64_encode
 from django.template.loader import render_to_string
 from django.db import IntegrityError
 from django.contrib.sites.shortcuts import get_current_site
+from django.utils.encoding import force_text
+from django.utils.http import urlsafe_base64_decode
+from django.utils.timezone import now, timedelta
+import urllib
+import json
+from renoauth import numbers
+from renoauth import messages
+
 
 # Create your models here.
 
@@ -127,14 +134,13 @@ def create(request):
 
         match_username = re.match('^[a-zA-Z0-9._]+$', username)
         match_email = re.match('[^@]+@[^@]+\.[^@]+', email)
-        validate_email(email)
 
         if not match_username:
             data = {
                 'username': username,
                 'email': email,
             }
-            wrong = {'message': 'It\'s unavailable username'}
+            wrong = {'message': messages.USERNAME_UNAVAILABLE}
             form = UserCreateForm(data)
             return render(request, 'renoauth/create.html', {'form': form, 'wrong': wrong})
         if len(username) > 30:
@@ -142,7 +148,7 @@ def create(request):
                 'username': username,
                 'email': email,
             }
-            wrong = {'message': 'username cannot over 30 characters'}
+            wrong = {'message': messages.USERNAME_OVER_30}
             form = UserCreateForm(data)
             return render(request, 'renoauth/create.html', {'form': form, 'wrong': wrong})
         if not match_email:
@@ -150,7 +156,7 @@ def create(request):
                 'username': username,
                 'email': email,
             }
-            wrong = {'message': 'It\'s unavailable email'}
+            wrong = {'message': messages.EMAIL_UNAVAILABLE}
             form = UserCreateForm(data)
             return render(request, 'renoauth/create.html', {'form': form, 'wrong': wrong})
 
@@ -159,7 +165,7 @@ def create(request):
                 'username': username,
                 'email': email,
             }
-            wrong = {'message': 'email cannot over 255 characters'}
+            wrong = {'message': messages.EMAIL_OVER_255}
             form = UserCreateForm(data)
             return render(request, 'renoauth/create.html', {'form': form, 'wrong': wrong})
 
@@ -168,7 +174,7 @@ def create(request):
                 'username': username,
                 'email': email,
             }
-            wrong = {'message': 'both passwords you submitted are not the same'}
+            wrong = {'message': messages.PASSWORD_NOT_THE_SAME}
             form = UserCreateForm(data)
             return render(request, 'renoauth/create.html', {'form': form, 'wrong': wrong})
         if len(password) > 128:
@@ -176,40 +182,76 @@ def create(request):
                 'username': username,
                 'email': email,
             }
-            wrong = {'message': 'password is too long'}
+            wrong = {'message': messages.PASSWORD_OVER_128}
             form = UserCreateForm(data)
             return render(request, 'renoauth/create.html', {'form': form, 'wrong': wrong})
 
         if form.is_valid():
 
-            id_number = make_id()
+            check_username_result = None
 
-            user_create = User.objects.create_user(
-                username=id_number,
-                password=form.cleaned_data['password'],
-                is_active=False,
-            )
+            while check_username_result is None:
+                try:
+                    id_number = make_id()
+                    user_create = User.objects.create_user(
+                        username=id_number,
+                        password=form.cleaned_data['password'],
+                        is_active=False,
+                    )
+                    user_extension = UserExtension.objects.create(
+                        user=user_create,
+                        status=numbers.USER_EXTENSION_USING,
+                    )
+                    check_username_result = 1
+                except IntegrityError as e:
+                    if 'unique constraint' in e.message:
+                        pass
+                    else:
+                        data = {
+                            'username': username,
+                            'email': email,
+                        }
+                        wrong = {'message': messages.CREATING_USER_EXTRA_ERROR}
+                        form = UserCreateForm(data)
+                        return render(request, 'renoauth/create.html', {'form': form, 'wrong': wrong})
 
-            user_extension = UserExtension.objects.create(
-                user=user_create,
-                status=0,
-            )
+            User.objects.filter(username=id_number).exists()
 
-            user_sub_email = UserSubEmail.objects.create(
-                user_extension=user_extension,
-                email=form.cleaned_data['email'],
-                status=0,
-            )
-            UserSubUsername.objects.create(
-                user_extension=user_extension,
-                username=form.cleaned_data['username'],
-                status=0,
-            )
+            if not UserSubEmail.objects.filter(email=email, status=11).exists() and not UserSubEmail.objects.filter(email=email, status=12).exists():
+                user_sub_email = UserSubEmail.objects.create(
+                    user_extension=user_extension,
+                    email=form.cleaned_data['email'],
+                    status=numbers.USER_SUB_EMAIL_NOT_VERIFIED,
+                )
+            else:
+                data = {
+                    'username': username,
+                    'email': email,
+                }
+                wrong = {'message': messages.EMAIL_ALREADY_USED}
+                form = UserCreateForm(data)
+                return render(request, 'renoauth/create.html', {'form': form, 'wrong': wrong})
+
+            if not UserSubUsername.objects.filter(username=username).exists():
+                UserSubUsername.objects.create(
+                    user_extension=user_extension,
+                    username=form.cleaned_data['username'],
+                    status=numbers.USER_SUB_USERNAME_USING,
+                )
+            else:
+                wrong = {'message': messages.USERNAME_ALREADY_USED}
+                data = {
+                    'username': username,
+                    'email': email,
+                }
+                form = UserCreateForm(data)
+                return render(request, 'renoauth/create.html', {'form': form, 'wrong': wrong})
+
             result = None
             while result is None:
                 try:
                     uid = urlsafe_base64_encode(force_bytes(user_create.pk))
-                    token = account_activate_token.make_token(user_create)
+                    token = account_activation_token.make_token(user_create)
 
                     UserAuthToken.objects.create(
                         email=user_sub_email,
@@ -221,11 +263,16 @@ def create(request):
                     if 'unique constraint' in e.message:
                         pass
                     else:
-                        wrong = {'message': 'Some Bug occurred'}
-                        render(request, 'error.html', wrong)
+                        wrong = {'message': messages.EMAIL_CONFIRMATION_EXTRA_ERROR}
+                        data = {
+                            'username': username,
+                            'email': email,
+                        }
+                        form = UserCreateForm(data)
+                        return render(request, 'renoauth/create.html', {'form': form, 'wrong': wrong})
 
             current_site = get_current_site(request)
-            subject = 'Activate Your MySite Account'
+            subject = '[' + current_site.domain + ']' + messages.EMAIL_CONFIRMATION_SUBJECT
 
             '''
             user = form.save(commit=False)
@@ -233,7 +280,7 @@ def create(request):
             user.save()
             '''
 
-            message = render_to_string('account_activation_email.html', {
+            message = render_to_string('renoauth/account_activation_email.html', {
                 'user': user_create,
                 'domain': current_site.domain,
                 'uid': uid,
@@ -251,19 +298,64 @@ def create(request):
                 'email': email,
             }
             form = UserCreateForm(data)
-            wrong = {'message': 'There is something wrong'}
+            wrong = {'message': messages.CREATING_USER_OVERALL_ERROR}
             return render(request, 'renoauth/create.html', {'form': form, 'wrong': wrong})
     else:
         form = UserCreateForm()
         return render(request, 'renoauth/create.html', {'form': form})
 
 
+def create_recaptcha(request):
+    if request.method == 'POST':
+        recaptcha_response = request.POST.get('g-recaptcha-response')
+        url = 'https://www.google.com/recaptcha/api/siteverify'
+        values = {
+            'secret': settings.GOOGLE_RECAPTCHA_SECRET_KEY,
+            'response': recaptcha_response
+        }
+        data = urllib.parse.urlencode(values).encode()
+        req = urllib.request.Request(url, data=data)
+        response = urllib.request.urlopen(req)
+        result = json.loads(response.read().decode())
+
+        if not result['success']:
+            return HttpResponse('reCAPTCHA 실패'+'<br>'+recaptcha_response)
+
+        return HttpResponse('reCAPTCHA'+'<br>'+recaptcha_response)
+    else:
+        return render(request, 'renoauth/reCAPTCHA.html')
+
+
 def create_email_confirm(request):
     return
 
 
-def create_email_confirm_key(request):
-    return
+def create_email_confirm_key(request, uid, token):
+    try:
+        uid = force_text(urlsafe_base64_decode(uid))
+        user = User.objects.get(pk=uid)
+        user_authtoken = UserAuthToken.objects.get(uid=uid)
+        user_subemail = user_authtoken.email
+    except (TypeError, ValueError, OverflowError, User.DoesNotExist):
+        user = None
+        user_subemail = None
+        user_authtoken = None
+
+    if user is not None and user_subemail is not None and user_authtoken is not None and account_activation_token.check_token(user, token):
+        elapsed_time = now() - timedelta(seconds=600)
+
+        if not now() - user_authtoken.created <= timedelta(seconds=60*10):
+            #token invalid
+            pass
+
+        user.is_active = True
+        user_subemail.status = 1
+        user.save()
+        user_subemail.save()
+        login(request, user)
+        return redirect('home')
+    else:
+        return render(request, 'renoauth/account_activation_invalid.html')
 
 
 def create_done(request):
