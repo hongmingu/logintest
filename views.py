@@ -25,7 +25,7 @@ import urllib
 import json
 from renoauth import numbers
 from renoauth import messages
-
+from renoauth import forbidden
 
 # Create your models here.
 
@@ -113,13 +113,36 @@ user.save()
 
 def create(request):
     if request.method == 'POST':
+        '''
+        recaptcha_response = request.POST.get('g-recaptcha-response')
+        url = 'https://www.google.com/recaptcha/api/siteverify'
+        values = {
+            'secret': settings.GOOGLE_RECAPTCHA_SECRET_KEY,
+            'response': recaptcha_response
+        }
+        data = urllib.parse.urlencode(values).encode()
+        req = urllib.request.Request(url, data=data)
+        response = urllib.request.urlopen(req)
+        result = json.loads(response.read().decode())
 
+        if not result['success']:
+            return HttpResponse('reCAPTCHA 실패'+'<br>'+recaptcha_response)
+        '''
         form = UserCreateForm(request.POST)
 
         username = form.data['username']
         email = form.data['email']
         password = form.data['password']
         password_confirm = form.data['password_confirm']
+        '''
+        match = [nm for nm in forbidden.FORBIDDEN_USERNAME_LIST if nm in username]
+        if match:
+            return JsonResponse({'result': 'exist'})
+        '''
+        for item in forbidden.FORBIDDEN_USERNAME_LIST:
+            match = [nm for nm in forbidden.FORBIDDEN_USERNAME_LIST if nm in username]
+            if match:
+                return JsonResponse({'result': item + 'banned username'})
 
         match_username = re.match('^[a-zA-Z0-9._]+$', username)
         match_email = re.match('[^@]+@[^@]+\.[^@]+', email)
@@ -182,7 +205,14 @@ def create(request):
             wrong = {'message': messages.PASSWORD_EQUAL_USERNAME}
             form = UserCreateForm(data)
             return render(request, 'renoauth/create.html', {'form': form, 'wrong': wrong})
-
+        if password in forbidden.FORBIDDEN_WORD_LIST:
+            data = {
+                'username': username,
+                'email': email,
+            }
+            wrong = {'message': messages.PASSWORD_EQUAL_USERNAME}
+            form = UserCreateForm(data)
+            return render(request, 'renoauth/create.html', {'form': form, 'wrong': wrong})
         if form.is_valid():
 
             check_username_result = None

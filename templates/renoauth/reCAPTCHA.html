@@ -9,3 +9,17 @@
     <button type="submit" class="btn btn-primary">Post</button>
   </form>
 {% endblock %}
+{% block extra_script %}
+<script>
+$(document).ready(function () {
+    $("form").submit(function(event) {
+
+        var recaptcha = $("#g-recaptcha-response").val();
+        if (recaptcha === "") {
+            event.preventDefault();
+            alert("Please check the recaptcha");
+        }
+    });
+});
+</script>
+{% endblock %}
