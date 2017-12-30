@@ -1,6 +1,7 @@
 {% extends 'base.html' %}
 {% block extra_head %}<script src='https://www.google.com/recaptcha/api.js'></script>{% endblock %}
 {% block contents %}
+
   <form method="post">
     {% csrf_token %}
 
@@ -8,17 +9,42 @@
 
     <button type="submit" class="btn btn-primary">Post</button>
   </form>
+
+    <button id="btn_test">Test</button>
 {% endblock %}
 {% block extra_script %}
 <script>
 $(document).ready(function () {
     $("form").submit(function(event) {
-
         var recaptcha = $("#g-recaptcha-response").val();
         if (recaptcha === "") {
             event.preventDefault();
             alert("Please check the recaptcha");
         }
+    });
+
+    $('#btn_test').click(function () {
+        $.ajax({
+            url:'/accounts/create/recaptcha/',
+            type:'post',
+            dataType:'json',
+            cache:false,
+            data:{
+            email_change:'yonginautoland@naver.com'
+            },
+            success:function (data) {
+                var array_list = ['list_1', {'1dic_key': '1dic_value', '2dic_key': '2dic_value'}, 'list_2', 'list_3'];
+                console.log($.type(array_list[0]));
+
+                console.log($(array_list).size());
+
+                $.each(data, function (index, item) {
+                    console.log('index : ' + index + ', item : ' + item )
+                    $.each(item, function (index, item) {
+                    })
+                });
+            }
+        });
     });
 });
 </script>

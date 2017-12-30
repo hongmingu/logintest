@@ -53,7 +53,6 @@ class UserAuthToken(models.Model):
     uid = models.CharField(max_length=64)
     token = models.CharField(max_length=34)
 
-    sent = models.DateTimeField(null=True)
     viewed = models.DateTimeField(null=True)
 
     created = models.DateTimeField(auto_now_add=True)

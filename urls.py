@@ -6,14 +6,15 @@ urlpatterns = [
     url(r'^$', views.accounts, name='accounts'),
 
     url(r'^create/$', views.create, name='create'),
+    url(r'^create/done/$', views.create_done, name='create_done'),
 
     url(r'^create/recaptcha/$', views.create_recaptcha, name='create_recaptcha'),
 
     url(r'^create/email/confirm/$', views.create_email_confirm, name='create_email_confirm'),
     url(r'^create/email/confirm/key/(?P<uid>[0-9A-Za-z_\-]+)/(?P<token>[0-9A-Za-z]{1,13}-[0-9A-Za-z]{1,20})/$',
         views.create_email_confirm_key, name='create_email_confirm_key'),
+    url(r'^create/email/confirm/done/(?P<uid>[0-9A-Za-z_\-]+)/(?P<token>[0-9A-Za-z]{1,13}-[0-9A-Za-z]{1,20})/$', views.create_email_confirm_done, name='create_email_confirm_done'),
 
-    url(r'^create/done/$', views.create_done, name='create_done'),
 
     url(r'^login/$', views.log_in, name='log_in'),
     url(r'^logout/$', views.log_out, name='log_out'),

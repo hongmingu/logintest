@@ -80,7 +80,6 @@ $(document).ready(function () {
         var password = $('#id_password').val();
         var password_confirm = $('#id_password_confirm').val();
         console.log('password : ' + password + ' password_confirm : ' + password_confirm);
-        const forbidden = ['admin', 'master', 'owner'];
 
         /*
         const found = forbidden.find(word => username.includes(word));
@@ -88,14 +87,15 @@ $(document).ready(function () {
             console.log({'result': found + ' banned username'});
         }
         */
-        match = false;
 
-        match = forbidden.some(function(n) {
-            return new RegExp(n).test(username)
+        const forbidden = ['admin', 'master', 'owner'];
+
+        const found = forbidden.find(function (item, index, array) {
+            return username.includes(item)
         });
 
-        if (match) {
-            console.log(username, 'exists');
+        if(found) {
+            console.log({'result': found + ' banned username'})
         }
 
         /*
