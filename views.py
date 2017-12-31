@@ -29,6 +29,9 @@ from renoauth import banned
 
 # Create your models here.
 
+def test(request):
+    return render(request, 'renoauth/test.html')
+
 
 def accounts(request):
     return render(request, 'renoauth/accounts.html')
@@ -155,7 +158,7 @@ def create(request):
             form = UserCreateForm(data)
             return render(request, 'renoauth/create.html', {'form': form, 'clue': clue})
 
-        match_username = re.match('^[a-zA-Z0-9._]+$', username)
+        match_username = re.match('^([A-Za-z0-9_](?:(?:[A-Za-z0-9_]|(?:\.(?!\.))){0,28}(?:[A-Za-z0-9_]))?)$', username)
         match_email = re.match('[^@]+@[^@]+\.[^@]+', email)
 
         ###### Integrity UserSubEmail and UserSubUsername
@@ -174,8 +177,14 @@ def create(request):
             form = UserCreateForm(data)
             return render(request, 'renoauth/create.html', {'form': form, 'clue': clue})
         ###### regex check
+
+        ####### 8이상 숫자 허용 x
         if not match_username:
             clue = {'message': messages.USERNAME_UNAVAILABLE}
+            form = UserCreateForm(data)
+            return render(request, 'renoauth/create.html', {'form': form, 'clue': clue})
+        if len(username) > 5 and username.isdigit():
+            clue = {'message': messages.USERNAME_OVER_5_CANNOT_DIGITS}
             form = UserCreateForm(data)
             return render(request, 'renoauth/create.html', {'form': form, 'clue': clue})
         if len(username) > 30:
@@ -273,7 +282,7 @@ def create(request):
 
             login(request, user_create)
 
-            return redirect('/create/done/')
+            return redirect('/')
         else:
             form = UserCreateForm(data)
             clue = {'message': messages.CREATING_USER_OVERALL_ERROR}
@@ -283,45 +292,20 @@ def create(request):
         return render(request, 'renoauth/create.html', {'form': form})
 
 
-def create_done(request):
+def email_key_send(request):
     return
 
 
-def create_recaptcha(request):
-    if request.method == 'POST':
-        if request.is_ajax():
-            array_list = ['list_1', {'1dic_key': '1dic_value', '2dic_key': '2dic_value'}, 'list_2', 'list_3']
-            try:
-                user_subemail = UserSubEmail.objects.get(email='mg375@naver.com')
-                user_authtoken = UserAuthToken.objects.get(email=user_subemail)
-            except (ValueError):
-                return JsonResponse({'array': 'no_mg375'})
-
-            if user_authtoken.viewed is None:
-                return JsonResponse({'array': 'yes_mg375_but _ null good '})
-
-            return JsonResponse({'array': array_list})
-
-        return redirect('accounts:create_done')
-    else:
-        return render(request, 'renoauth/reCAPTCHA.html')
-#        return redirect('/accounts/create/done')
-
-
-def create_email_confirm(request):
-    return
-
-
-def create_email_confirm_key(request, uid, token):
+def email_key_confirm(request, uid, token):
     try:
         user_authtoken = UserAuthToken.objects.get(uid=uid, token=token)
     except (ValueError):
         clue = {'message': messages.KEY_NOT_EXIST}
-        return render(request, 'renoauth/create_email_confirm_key.html', {'clue': clue})
+        return render(request, 'renoauth/email_key_confirm.html', {'clue': clue})
 
     if user_authtoken.viewed is not None:
         clue = {'message': messages.KEY_ALREADY_VIEWED}
-        return render(request, 'renoauth/create_email_confirm_key.html', {'clue': clue})
+        return render(request, 'renoauth/email_key_confirm.html', {'clue': clue})
 
     try:
         uid = force_text(urlsafe_base64_decode(uid))
@@ -339,7 +323,7 @@ def create_email_confirm_key(request, uid, token):
 
         if not now() - user_authtoken.created <= timedelta(seconds=60*10):
             clue = {'message': messages.KEY_EXPIRED}
-            return render(request, 'renoauth/create_email_confirm_key.html', {'clue': clue})
+            return render(request, 'renoauth/email_key_confirm.html', {'clue': clue})
 
         user.is_active = True
         user_subemail.status = numbers.USER_SUB_EMAIL_VERIFIED_PRIMARY
@@ -350,30 +334,48 @@ def create_email_confirm_key(request, uid, token):
         user_extension.save()
         user_authtoken.save()
         clue = {'message': messages.KEY_CREATE_SUCCESS}
-        return render(request, 'renoauth/create_email_confirm_key.html', {'clue': clue})
+        return render(request, 'renoauth/email_key_confirm.html', {'clue': clue})
     else:
         clue = {'message': messages.KEY_OVERALL_FAILED}
-        return render(request, 'renoauth/create_email_confirm_key.html', {'clue': clue})
-
-
-def create_email_confirm_done(request):
-    return
+        return render(request, 'renoauth/email_key_confirm.html', {'clue': clue})
 
 
 def log_in(request):
     if request.method == 'POST':
         form = LoginForm(request.POST)
         username = request.POST['username']
+        if '@' in username:
+            user_object = UserSubEmail.objects.get(email=username)
+            if user_object is None:
+                clue = {'message': messages.LOGIN_FAILED}
+                return render(request, 'main.html', {'clue': clue})
+            user = user_object.user_extension.user
+            # kwargs = {'email': username}
+        else:
+            user_object = UserSubUsername.objects.get(username=username)
+            user = user_object.user_extension.user
+            kwargs = {'username': username}
+        try:
+            # user = User.objects.get(**kwargs)
+            if user.check_password(password):
+                return user
+        except User.DoesNotExist:
+            return None
+
         password = request.POST['password']
         user = authenticate(username=username, password=password)
         if user is not None:
             login(request, user)
             username = user.username
-            useremail = user.email
-            userpass = user.password
-            return HttpResponse('유저이름'+username+'유저이메일'+useremail+'유저비밀번호'+userpass)
+            user_extension = user.userextension
+            user_subemail = UserSubEmail.objects.get(user_extension=user_extension,
+                                                    status=numbers.USER_SUB_EMAIL_VERIFIED_PRIMARY)
+            user_subusername = UserSubUsername.objects.get(user_extension=user_extension,
+                                                           status=numbers.USER_SUB_USERNAME_USING)
+            return redirect('/')
         else:
-            return HttpResponse('로그인실패')
+            clue = {'message': messages.LOGIN_FAILED}
+            return render(request, 'main.html', {'clue': clue})
     else:
         form = LoginForm()
         return render(request, 'signin.html', {'form':form})

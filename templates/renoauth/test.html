@@ -1,0 +1,50 @@
+{% extends 'base.html' %}
+{% block extra_head %}<script src='https://www.google.com/recaptcha/api.js'></script>{% endblock %}
+{% block contents %}
+
+  <form method="post">
+    {% csrf_token %}
+
+    <div class="g-recaptcha" data-sitekey="6Ld4Tz4UAAAAAEnsEF3EcBBdGViccpEQNiA1rBcs"></div>
+
+    <button type="submit" class="btn btn-primary">Post</button>
+  </form>
+
+    <button id="btn_test">Test</button>
+    <br>
+    <input type="text" id="input_test"/>
+{% endblock %}
+{% block extra_script %}
+<script>
+$(document).ready(function () {
+    $("form").submit(function(event) {
+        var recaptcha = $("#g-recaptcha-response").val();
+        if (recaptcha === "") {
+            event.preventDefault();
+            alert("Please check the recaptcha");
+        }
+    });
+
+    $('#btn_test').click(function () {
+        var array_list = ['list_1', {'1dic_key': '1dic_value', '2dic_key': '2dic_value'}, 'list_2', 'list_3'];
+        var text_test = $('#input_test').val();
+        var regex_test = /^([A-Za-z0-9_](?:(?:[A-Za-z0-9_]|(?:\.(?!\.))){0,28}(?:[A-Za-z0-9_]))?)$/;
+        var match_result = regex_test.test(text_test);
+        var regex_numeric_test = /^\d+$/;
+        var match_result_numeric = regex_numeric_test.test(text_test);
+
+        console.log(match_result);
+        console.log('-----------');
+        console.log(match_result_numeric);
+
+        //console.log($.type(array_list[0]));
+        //console.log($(array_list).size());
+        //$.each(data, function (index, item) {
+        //    console.log('index : ' + index + ', item : ' + item )
+        //    $.each(item, function (index, item) {
+        //    })
+        //});
+    });
+});
+</script>
+{% endblock %}
