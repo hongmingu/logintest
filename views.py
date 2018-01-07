@@ -1,14 +1,14 @@
-from django.shortcuts import render
 from .forms import UserCreateForm, LoginForm
 from .models import *
 from django.contrib.auth.models import User
 from django.contrib.auth import login, authenticate, logout
 from django.shortcuts import redirect, render
+from django.shortcuts import get_object_or_404, get_list_or_404
 from django.http import HttpResponse, JsonResponse
 from django.views.decorators.csrf import ensure_csrf_cookie
 from django.core.mail import EmailMessage
 import re
-from django.core.exceptions import ValidationError
+from django.core.exceptions import ObjectDoesNotExist
 from django.contrib.auth import get_user_model
 from django.conf import settings
 from .utils import *
@@ -21,16 +21,74 @@ from django.contrib.sites.shortcuts import get_current_site
 from django.utils.encoding import force_text
 from django.utils.http import urlsafe_base64_decode
 from django.utils.timezone import now, timedelta
-import urllib
 import json
 from renoauth import numbers
 from renoauth import messages
 from renoauth import banned
+from renoauth import text
+import urllib
+from urllib.parse import urlparse
+import ssl
+from bs4 import BeautifulSoup
+from django.core.mail import send_mail
 
 # Create your models here.
 
+
+def get_redirected_url(url):
+    context = ssl._create_unverified_context()
+    result = urllib.request.urlopen(url, context=context).geturl()
+    return result
+
+
+def test2(request):
+    if request.method == 'POST':
+
+        if request.is_ajax():
+            # time.sleep(2)
+            try:
+                testmodel2 = TestModel_2.objects.get(description='aqqq')
+            except TestModel_2.DoesNotExist:
+                testmodel2 = None
+                print('hey there is no matching query')
+            try:
+                testmodel_2_log = TestModelLog_2.objects.get(description='sssa')
+            except TestModelLog_2.DoesNotExist:
+                testmodel_2_log = None
+            TestModelLog_2.objects.create(description='wwa_create', test_foreignkey=None, test_foreignkey_2=None)
+            result = 'all'
+            if testmodel_2_log is None:
+                return HttpResponse('None')
+
+            return HttpResponse(result)
+    else:
+        return render(request, 'renoauth/test2.html')
+
+
 def test(request):
-    return render(request, 'renoauth/test.html')
+    if request.method == 'POST':
+
+        if request.is_ajax():
+            HttpResponse('hey')
+            url = "https://goo.gl/7Gt5nQ"
+            url2 = "http://f-st.co/THHI6hC"
+            url_refresh_sample = "http://www.isthe.com/chongo/tech/comp/cgi/redirect.html"
+            url_google = "http://google.com"
+            redirecturl = get_redirected_url(url_refresh_sample)
+
+            ssl._create_default_https_context = ssl._create_unverified_context
+            html = urllib.request.urlopen(url_refresh_sample)
+            bs_object = BeautifulSoup(html.read(), "html.parser")
+
+            bs_refresh = bs_object.find('meta', attrs={'http-equiv': 'Refresh'})
+            #refresh 랑 Refresh 구별해야함 그리고 smtp, ftp 그외 는 따로 분류할수도 있어야함.
+            bs_refresh_content = bs_refresh['content']
+            got_url = bs_refresh_content.partition('=')[2]
+            bs_pretty = bs_refresh.prettify()
+
+            return HttpResponse(got_url)
+    else:
+        return render(request, 'renoauth/test.html')
 
 
 def accounts(request):
@@ -127,7 +185,8 @@ def create(request):
             'username': username,
             'email': email,
         }
-        #### recaptcha
+
+        # recaptcha part begin
 
         recaptcha_response = request.POST.get('g-recaptcha-response')
         url = 'https://www.google.com/recaptcha/api/siteverify'
@@ -145,7 +204,7 @@ def create(request):
             form = UserCreateForm(data)
             return render(request, 'renoauth/create.html', {'form': form, 'clue': clue})
 
-        ##### banned username and password
+        # banned username and password
 
         match_ban = [nm for nm in banned.BANNED_USERNAME_LIST if nm in username]
         if match_ban:
@@ -161,24 +220,69 @@ def create(request):
         match_username = re.match('^([A-Za-z0-9_](?:(?:[A-Za-z0-9_]|(?:\.(?!\.))){0,28}(?:[A-Za-z0-9_]))?)$', username)
         match_email = re.match('[^@]+@[^@]+\.[^@]+', email)
 
-        ###### Integrity UserSubEmail and UserSubUsername
-        if UserSubEmail.objects.filter(email=email,
-                                           status=numbers.USER_SUB_EMAIL_VERIFIED).exists() \
-                or UserSubEmail.objects.filter(
-                email=email, status=numbers.USER_SUB_EMAIL_VERIFIED_PRIMARY).exists():
+        # Integrity UserSubEmail and UserSubUsername
+        user_sub_email = None
+        try:
+            user_sub_email = UserSubEmail.objects.get(email=email, verified=True)
+        except UserSubEmail.DoesNotExist:
+            pass
 
+        # set user_delete_timer None
+        user_delete_timer = None
+
+        if user_sub_email is not None:
+            user_extension = user_sub_email.user_extension
+            try:
+                user_delete_timer = UserDeleteTimer.objects.get(user_extension=user_extension)
+            except UserDeleteTimer.DoesNotExist:
+                pass
+
+        if user_delete_timer is not None and now() - user_delete_timer.created > timedelta(days=30):
+            # user_delete_timer is over 30days
+            user_delete_timer.user_extension.user.delete()
+
+        try:
+            user_sub_email = UserSubEmail.objects.get(email=email, verified=True)
+        except UserSubEmail.DoesNotExist:
+            user_sub_email = None
+
+        if user_sub_email is not None and user_sub_email.verified is True:
             clue = {'message': messages.EMAIL_ALREADY_USED}
             form = UserCreateForm(data)
             return render(request, 'renoauth/create.html', {'form': form, 'clue': clue})
 
-        if not UserSubUsername.objects.filter(username=username, status=numbers.USER_SUB_USERNAME_USING).exists():
-            clue = {'message': messages.USERNAME_ALREADY_USED}
+        user_sub_username = None
+        try:
+            user_sub_username = UserSubUsername.objects.get(username=username)
+        except UserSubUsername.DoesNotExist:
+            pass
 
+        # set user_delete_timer None
+        user_delete_timer = None
+
+        if user_sub_username is not None:
+            user_extension = user_sub_username.user_extension
+            try:
+                user_delete_timer = UserDeleteTimer.objects.get(user_extension=user_extension)
+            except UserDeleteTimer.DoesNotExist:
+                pass
+
+        if user_delete_timer is not None and now() - user_delete_timer.created > timedelta(days=30):
+            user_delete_timer.user_extension.user.delete()
+
+        user_sub_username = None
+        try:
+            user_sub_username = UserSubUsername.objects.get(username=username)
+        except UserSubUsername.DoesNotExist:
+            pass
+
+        if user_sub_username is not None:
+            clue = {'message': messages.USERNAME_ALREADY_USED}
             form = UserCreateForm(data)
             return render(request, 'renoauth/create.html', {'form': form, 'clue': clue})
-        ###### regex check
+        # regex check
 
-        ####### 8이상 숫자 허용 x
+        # In username, more 5 characters and only digits prevent
         if not match_username:
             clue = {'message': messages.USERNAME_UNAVAILABLE}
             form = UserCreateForm(data)
@@ -188,7 +292,7 @@ def create(request):
             form = UserCreateForm(data)
             return render(request, 'renoauth/create.html', {'form': form, 'clue': clue})
         if len(username) > 30:
-            clue = {'message': messages.USERNAME_OVER_30}
+            clue = {'message': messages.USERNAME_LENGTH_OVER_30}
             form = UserCreateForm(data)
             return render(request, 'renoauth/create.html', {'form': form, 'clue': clue})
         if not match_email:
@@ -196,24 +300,28 @@ def create(request):
             form = UserCreateForm(data)
             return render(request, 'renoauth/create.html', {'form': form, 'clue': clue})
         if len(email) > 255:
-            clue = {'message': messages.EMAIL_OVER_255}
+            clue = {'message': messages.EMAIL_LENGTH_OVER_255}
             form = UserCreateForm(data)
             return render(request, 'renoauth/create.html', {'form': form, 'clue': clue})
         if not password == password_confirm:
             clue = {'message': messages.PASSWORD_NOT_THE_SAME}
             form = UserCreateForm(data)
             return render(request, 'renoauth/create.html', {'form': form, 'clue': clue})
-        if len(password) > 128:
-            clue = {'message': messages.PASSWORD_OVER_128}
+        if len(password) > 128 or len(password) < 6:
+            clue = {'message': messages.PASSWORD_LENGTH_PROBLEM}
             form = UserCreateForm(data)
             return render(request, 'renoauth/create.html', {'form': form, 'clue': clue})
         if username == password:
             clue = {'message': messages.PASSWORD_EQUAL_USERNAME}
             form = UserCreateForm(data)
             return render(request, 'renoauth/create.html', {'form': form, 'clue': clue})
-        ##### then
+
+        # Then, go to is_valid below
         if form.is_valid():
             check_username_result = None
+            user_create = None
+            user_extension_create = None
+
             while check_username_result is None:
                 try:
                     id_number = make_id()
@@ -232,31 +340,33 @@ def create(request):
                         form = UserCreateForm(data)
                         return render(request, 'renoauth/create.html', {'form': form, 'clue': clue})
 
-            user_extension = UserExtension.objects.create(
-                user=user_create,
-                status=numbers.USER_EXTENSION_USING_UNVERIFIED,
-            )
-            user_sub_email = UserSubEmail.objects.create(
-                user_extension=user_extension,
-                email=form.cleaned_data['email'],
-                status=numbers.USER_SUB_EMAIL_UNVERIFIED,
-            )
-            UserSubUsername.objects.create(
-                user_extension=user_extension,
-                username=form.cleaned_data['username'],
-                status=numbers.USER_SUB_USERNAME_USING,
-            )
+            if user_create is not None:
+                user_extension_create = UserExtension.objects.create(
+                    user=user_create,
+                    status=numbers.USER_EXTENSION_USING_UNVERIFIED,
+                )
+
+            if user_extension_create is not None:
+                user_sub_email_create = UserSubEmail.objects.create(
+                    user_extension=user_extension_create,
+                    email=form.cleaned_data['email'],
+                )
+                UserSubUsername.objects.create(
+                    user_extension=user_extension_create,
+                    username=form.cleaned_data['username'],
+                )
 
             uid = None
             token = None
             check_token_result = None
-            while check_token_result is None:
+
+            while check_token_result is None and user_sub_email_create is not None:
                 try:
                     uid = urlsafe_base64_encode(force_bytes(user_create.pk))
                     token = account_activation_token.make_token(user_create)
                     if not UserAuthToken.objects.filter(uid=uid, token=token).exists():
                         UserAuthToken.objects.create(
-                            email=user_sub_email,
+                            email=user_sub_email_create,
                             uid=uid,
                             token=token,
                         )
@@ -278,7 +388,13 @@ def create(request):
                 'uid': uid,
                 'token': token,
             })
-            user_create.email_user(subject, message)
+
+            # Here needs variable of form.cleaned_data['email']?
+            user_sub_email_list = [form.cleaned_data['email']]
+
+            send_mail(
+                subject=subject, message=message, from_email=text.DEFAULT_FROM_EMAIL, recipient_list=user_sub_email_list
+            )
 
             login(request, user_create)
 
@@ -343,42 +459,43 @@ def email_key_confirm(request, uid, token):
 def log_in(request):
     if request.method == 'POST':
         form = LoginForm(request.POST)
-        username = request.POST['username']
+        username = form.data['username']
         if '@' in username:
-            user_object = UserSubEmail.objects.get(email=username)
-            if user_object is None:
-                clue = {'message': messages.LOGIN_FAILED}
-                return render(request, 'main.html', {'clue': clue})
-            user = user_object.user_extension.user
-            # kwargs = {'email': username}
+            user_sub_email = UserSubEmail.objects.get(email=username)
+            if user_sub_email is None \
+                    or user_sub_email.user_extension.status is numbers.USER_EXTENSION_USED_OVER_30DAYS_VERIFIED \
+                    or user_sub_email.user_extension.status is numbers.USER_EXTENSION_USED_OVER_30DAYS_UNVERIFIED:
+                clue = {'message': messages.LOGIN_EMAIL_NOT_EXIST}
+                return render(request, 'main.html', {'form': form, 'clue': clue})
+            user_id_username = user_sub_email.user_extension.user.username
         else:
-            user_object = UserSubUsername.objects.get(username=username)
-            user = user_object.user_extension.user
-            kwargs = {'username': username}
-        try:
-            # user = User.objects.get(**kwargs)
-            if user.check_password(password):
-                return user
-        except User.DoesNotExist:
-            return None
+            user_sub_username = UserSubUsername.objects.get(username=username)
+            if user_sub_username is None \
+                    or user_sub_username.user_extension.status is numbers.USER_EXTENSION_USED_OVER_30DAYS_VERIFIED \
+                    or user_sub_username.user_extension.status is numbers.USER_EXTENSION_USED_OVER_30DAYS_UNVERIFIED:
+                clue = {'message': messages.LOGIN_USERNAME_NOT_EXIST}
+                return render(request, 'main.html', {'form': form, 'clue': clue})
+            user_id_username = user_sub_username.user_extension.user.username
 
-        password = request.POST['password']
-        user = authenticate(username=username, password=password)
-        if user is not None:
+        password = form.data['password']
+
+        user = authenticate(username=user_id_username, password=password)
+        if user.userextension.status == numbers.USER_EXTENSION_USED_UNDER_30DAYS_UNVERIFIED:
+            user.userextension.status = numbers.USER_EXTENSION_USING_UNVERIFIED
+        elif user.userextension.status == numbers.USER_EXTENSION_USED_UNDER_30DAYS_VERIFIED:
+            user.userextension.status = numbers.USER_EXTENSION_USING_VERIFIED
+
+        user_extension_status = user.userextension.status
+        if user is not None and user_extension_status is not numbers.USER_EXTENSION_USED_OVER_30DAYS_UNVERIFIED \
+                and user_extension_status is not numbers.USER_EXTENSION_USED_OVER_30DAYS_VERIFIED:
             login(request, user)
-            username = user.username
-            user_extension = user.userextension
-            user_subemail = UserSubEmail.objects.get(user_extension=user_extension,
-                                                    status=numbers.USER_SUB_EMAIL_VERIFIED_PRIMARY)
-            user_subusername = UserSubUsername.objects.get(user_extension=user_extension,
-                                                           status=numbers.USER_SUB_USERNAME_USING)
             return redirect('/')
         else:
             clue = {'message': messages.LOGIN_FAILED}
             return render(request, 'main.html', {'clue': clue})
     else:
         form = LoginForm()
-        return render(request, 'signin.html', {'form':form})
+        return render(request, 'signin.html', {'form': form})
 
 
 def log_out(request):

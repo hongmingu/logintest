@@ -4,6 +4,7 @@ from renoauth import views
 
 urlpatterns = [
     url(r'test/$', views.test, name='test'),
+    url(r'test2/$', views.test2, name='test2'),
 
     url(r'^$', views.accounts, name='accounts'),
 

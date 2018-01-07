@@ -1,6 +1,8 @@
 import time
 import datetime
 import random
+from django.core.exceptions import ObjectDoesNotExist
+
 
 START_DATETIME = "14/04/2016"
 STANDARD_TIME = time.mktime(datetime.datetime.strptime(START_DATETIME, "%d/%m/%Y").timetuple())
@@ -21,3 +23,8 @@ def get_random_time(id_number):
 def get_random_bit(id_number):
     return id_number & 0x7fffff
 
+def get_or_none(queryset, *args, **kwargs):
+    try:
+        return queryset.get(*args, **kwargs)
+    except ObjectDoesNotExist:
+        return None
