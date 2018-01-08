@@ -23,6 +23,7 @@ def get_random_time(id_number):
 def get_random_bit(id_number):
     return id_number & 0x7fffff
 
+
 def get_or_none(queryset, *args, **kwargs):
     try:
         return queryset.get(*args, **kwargs)

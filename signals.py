@@ -15,6 +15,23 @@ def create_update_log(sender, instance, created, **kwargs):
 @receiver(post_delete, sender=TestModel_2)
 def delete_log(sender, instance, **kwargs):
     TestModelLog_2.objects.create(description=instance.description, status=2038)
+    
+def save(self, commit=True):
+    user = super(CustomFormThing, self).save(commit=False)
+    #set some other attrs on user here ...
+    user._some = 'some'
+    user._other = 'other'
+    if commit:
+        user.save()
+
+    return user
+
+@receiver(post_save, sender=User)
+def create_profile(sender, instance, created, **kwargs):
+    some_id = getattr(instance, '_some', None)
+    other_id = getattr(instance, '_other', None)
+
+    if created:
 '''
 
     # 여기 datetime 을 instance.updated 로 할지 now() 로 할지 결정해야한다 .

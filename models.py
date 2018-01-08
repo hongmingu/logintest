@@ -12,7 +12,7 @@ class UserExtension(models.Model):
 
     user = models.OneToOneField(User, on_delete=models.CASCADE)
 
-    status = models.PositiveSmallIntegerField(default=0)
+    verified = models.BooleanField(default=False)
 
     updated = models.DateTimeField(auto_now=True)
     created = models.DateTimeField(auto_now_add=True)
@@ -51,7 +51,7 @@ class UserSubEmail(models.Model):
 
     email = models.EmailField(max_length=255)
 
-    primary = models.BooleanField(default=True)
+    primary = models.BooleanField(default=False)
     verified = models.BooleanField(default=False)
 
     updated = models.DateTimeField(auto_now=True)
@@ -69,8 +69,6 @@ class UserAuthToken(models.Model):
     uid = models.CharField(max_length=64)
     token = models.CharField(max_length=34)
 
-    viewed = models.BooleanField(default=False)
-
     created = models.DateTimeField(auto_now_add=True)
 
     def __str__(self):
@@ -79,7 +77,6 @@ class UserAuthToken(models.Model):
 
 @python_2_unicode_compatible
 class TestModel_2(models.Model):
-
     description = models.CharField(max_length=34)
 
     updated = models.DateTimeField(auto_now=True)

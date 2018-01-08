@@ -25,7 +25,7 @@ RECAPTCHA_CONFIRM_NEED = 'Check that you are human'
 KEY_NOT_EXIST = 'This key is unavailable'
 KEY_EXPIRED = 'This key is expired'
 KEY_ALREADY_VIEWED = 'This key is already expired'
-KEY_CREATE_SUCCESS = 'Thanks for creating account'
+KEY_CONFIRM_SUCCESS = 'Thanks for email confirmation'
 KEY_OVERALL_FAILED = 'There is something wrong for key'
 
 LOGIN_FAILED = 'Login has failed'
