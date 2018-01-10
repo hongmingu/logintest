@@ -2,6 +2,7 @@ from django import forms
 from django.contrib.auth.models import User
 from django.contrib.auth import get_user_model
 from django.conf import settings
+from renoauth.models import UserSubUsername, UserSubEmail
 
 
 class UserCreateForm(forms.ModelForm):

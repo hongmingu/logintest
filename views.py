@@ -1,4 +1,4 @@
-from .forms import UserCreateForm, LoginForm
+from .forms import *
 from .models import *
 from django.contrib.auth.models import User
 from django.contrib.auth import login, authenticate, logout
@@ -25,12 +25,13 @@ import json
 from renoauth import messages
 from renoauth import banned
 from renoauth import text
+from renoauth import status
 import urllib
 from urllib.parse import urlparse
 import ssl
 from bs4 import BeautifulSoup
 from django.core.mail import send_mail
-
+from django.http import HttpResponse, HttpResponseNotFound, Http404
 # Create your models here.
 
 
@@ -338,23 +339,21 @@ def create(request):
             new_user_sub_username = None
 
             if new_user_extension_create is not None:
+
                 new_user_sub_email_create = UserSubEmail.objects.create(
                     user_extension=new_user_extension_create,
                     email=new_email,
                     verified=False,
                     primary=True,
                 )
+
                 if user_sub_email is not None and user_sub_email.verified is False:
                     user_sub_email.delete()
-                    UserSubUsername.objects.create(
-                        user_extension=new_user_extension_create,
-                        username=new_username,
-                    )
-                else:
-                    UserSubUsername.objects.create(
-                        user_extension=new_user_extension_create,
-                        username=new_username,
-                    )
+
+                new_user_sub_username = UserSubUsername.objects.create(
+                    user_extension=new_user_extension_create,
+                    username=new_username,
+                )
 
             uid = None
             token = None
@@ -370,7 +369,6 @@ def create(request):
                                 email=new_user_sub_email_create,
                                 uid=uid,
                                 token=token,
-                                viewed=False,
                             )
                         check_token_result = 1
                     except IntegrityError as e:
@@ -385,7 +383,7 @@ def create(request):
             subject = '[' + current_site.domain + ']' + messages.EMAIL_CONFIRMATION_SUBJECT
 
             message = render_to_string('renoauth/account_activation_email.html', {
-                'user': new_user_create,
+                'user': new_user_sub_username,
                 'domain': current_site.domain,
                 'uid': uid,
                 'token': token,
@@ -409,10 +407,6 @@ def create(request):
     else:
         form = UserCreateForm()
         return render(request, 'renoauth/create.html', {'form': form})
-
-
-def email_key_send(request):
-    return
 
 
 def email_key_confirm(request, uid, token):
@@ -446,9 +440,13 @@ def email_key_confirm(request, uid, token):
 
         user.is_active = True
         user_sub_email.verified = True
+
         user_extension.verified = False
 
-        user_auth_token.delete()
+        email = user_sub_email.email
+
+        UserAuthToken.objects.filter(email__email=email).delete()
+        UserSubEmail.objects.filter(email=email).exclude(user_extension=user_extension).delete()
 
         user.save()
         user_sub_email.save()
@@ -533,11 +531,11 @@ def log_in(request):
 
 
 def log_out(request):
-    return
-
-
-def log_out_done(request):
-    return
+    if request.method == "POST":
+        logout(request)
+        return redirect('/')
+    else:
+        return render(request, 'log_out')
 
 
 def username_change(request):
@@ -573,30 +571,264 @@ def password_reset_key_done(request):
 
 
 def email_add(request):
-    return
+    if request.method == 'POST':
+        if request.is_ajax():
+            new_email = request.POST['email']
+            if new_email is not None:
+
+                match_email = re.match('[^@]+@[^@]+\.[^@]+', new_email)
+                if not match_email:
+                    clue = None
+                    clue['success'] = False
+                    clue['message'] = messages.EMAIL_UNAVAILABLE
+                    return JsonResponse(clue)
+                if len(new_email) > 255:
+                    clue = None
+                    clue['success'] = False
+                    clue['message'] = messages.EMAIL_LENGTH_OVER_255
+                    return JsonResponse(clue)
+
+                email_exist = None
+                try:
+                    email_exist = UserSubEmail.objects.get(email=new_email, verified=True)
+                except UserSubEmail.DoesNotExist:
+                    pass
+
+                if email_exist is not None:
+                    clue = None
+                    clue['success'] = False
+                    clue['message'] = messages.EMAIL_ALREADY_USED
+                    return JsonResponse(clue)
+                else:
+                    user = request.user
+                    user_extension = user.userextension
+
+                    new_user_sub_email_add = UserSubEmail.objects.create(
+                        user_extension=user_extension,
+                        email=new_email,
+                        verified=False,
+                        primary=False,
+                    )
+
+                    uid = None
+                    token = None
+                    check_token_result = None
+                    if new_user_sub_email_add is not None:
+
+                        while check_token_result is None:
+                            try:
+                                uid = urlsafe_base64_encode(force_bytes(user.pk))
+                                token = account_activation_token.make_token(user)
+                                if not UserAuthToken.objects.filter(uid=uid, token=token).exists():
+                                    UserAuthToken.objects.create(
+                                        email=new_user_sub_email_add,
+                                        uid=uid,
+                                        token=token,
+                                    )
+                                check_token_result = 1
+                            except IntegrityError as e:
+                                if 'unique constraint' in e.message:
+                                    pass
+                                else:
+                                    clue = {'message': messages.EMAIL_CONFIRMATION_EXTRA_ERROR}
+                                    return render(request, 'renoauth/accounts_change.html', {'clue': clue})
+                    new_user_sub_email_list = [new_email]
+                    current_site = get_current_site(request)
+
+                    message = render_to_string('renoauth/account_activation_email.html', {
+                        'user': user_extension,
+                        'domain': current_site.domain,
+                        'uid': uid,
+                        'token': token,
+                    })
+
+                    subject = '[' + current_site.domain + ']' + messages.EMAIL_CONFIRMATION_SUBJECT
+
+                    send_mail(
+                        subject=subject, message=message, from_email=text.DEFAULT_FROM_EMAIL,
+                        recipient_list=new_user_sub_email_list
+                    )
+                    result = None
+                    result['success'] = True
+                    result['message'] = messages.EMAIL_ADDED
+                    return JsonResponse(result)
+            else:
+                result = None
+                result['success'] = False
+                result['message'] = messages.BAD_ACCESS
+                return JsonResponse(result)
+    else:
+        raise Http404(messages.BAD_ACCESS)
 
 
 @ensure_csrf_cookie
-def email_add_key(request):
+def email_key_send(request):
     if request.method == 'POST':
         if request.is_ajax():
-            request_email = request.POST['email']
-            email_to = []
-            email_to.append(request_email)
-            email = EmailMessage('hhhhhhho', 'ddddddddddddddddi', from_email='mingu1@60noname.com', to=email_to)
-            email.send()
-            return JsonResponse({'your_email': request_email})
-    elif request.method == 'GET':
-        return render(request, 'email_send.html')
+            new_email = request.POST['email']
+            if new_email is not None:
+                new_user_sub_email = None
+                try:
+                    new_user_sub_email = UserSubEmail.objects.get(email=new_email,
+                                                                  user_extension=request.user.userextension,
+                                                                  verified=False)
+                except UserSubEmail.DoesNotExist:
+                    pass
+                if new_user_sub_email is not None:
 
+                    user = request.user
+                    user_extension = user.userextension
 
-def email_add_key_done(request):
-    return
+                    uid = None
+                    token = None
+                    check_token_result = None
 
+                    while check_token_result is None:
+                        try:
+                            uid = urlsafe_base64_encode(force_bytes(user.pk))
+                            token = account_activation_token.make_token(user)
+                            if not UserAuthToken.objects.filter(uid=uid, token=token).exists():
+                                UserAuthToken.objects.create(
+                                    email=new_user_sub_email,
+                                    uid=uid,
+                                    token=token,
+                                )
+                            check_token_result = 1
+                        except IntegrityError as e:
+                            if 'unique constraint' in e.message:
+                                pass
+                            else:
+                                clue = {'message': messages.EMAIL_CONFIRMATION_EXTRA_ERROR}
+                                return render(request, 'renoauth/accounts_change.html', {'clue': clue})
+                    new_user_sub_email_list = [new_email]
+                    current_site = get_current_site(request)
 
-def email_default(request):
-    return
+                    message = render_to_string('renoauth/account_activation_email.html', {
+                        'user': user_extension,
+                        'domain': current_site.domain,
+                        'uid': uid,
+                        'token': token,
+                    })
+
+                    subject = '[' + current_site.domain + ']' + messages.EMAIL_CONFIRMATION_SUBJECT
+
+                    send_mail(
+                        subject=subject, message=message, from_email=text.DEFAULT_FROM_EMAIL,
+                        recipient_list=new_user_sub_email_list
+                    )
+                    result = None
+                    result['success'] = True
+                    result['message'] = messages.EMAIL_SENT
+                    return JsonResponse(result)
+                else:
+                    clue = None
+                    clue['success'] = False
+                    clue['message'] = messages.EMAIL_CANNOT_SEND
+                    return JsonResponse(clue)
+            else:
+                result = None
+                result['success'] = False
+                result['message'] = messages.BAD_ACCESS
+                return JsonResponse(result)
+
+    else:
+        result = None
+        result['success'] = False
+        result['message'] = messages.BAD_ACCESS
+        return JsonResponse(result)
 
 
 def email_remove(request):
-    return
+    if request.method == "POST":
+        if request.is_ajax():
+            target_email = request.POST['email']
+            if target_email is not None:
+                target_user_sub_email = None
+                try:
+                    target_user_sub_email = UserSubEmail.objects.get(user_extension=request.user.userextension,
+                                                                     email=target_email)
+                except UserSubEmail.DoesNotExist:
+                    pass
+
+                if target_user_sub_email is not None:
+                    if target_user_sub_email.primary is True:
+                        result = None
+                        result['success'] = False
+                        result['message'] = messages.EMAIL_PRIMARY_CANNOT_BE_REMOVED
+                        return JsonResponse(result)
+                    else:
+                        target_user_sub_email.delete()
+                        result = None
+                        result['success'] = True
+                        result['message'] = messages.EMAIL_REMOVED
+                        return JsonResponse(result)
+                else:
+                    result = None
+                    result['success'] = False
+                    result['message'] = messages.EMAIL_NOT_EXIST
+                    return JsonResponse(result)
+    else:
+        result = None
+        result['success'] = False
+        result['message'] = messages.BAD_ACCESS
+        return JsonResponse(result)
+
+
+def email_primary(request):
+    if request.method == "POST":
+        if request.is_ajax():
+            email = request.POST['email']
+            if email is not None:
+                user = request.user
+                user_extension = user.userextension
+                target_email = None
+                try:
+                    target_email = UserSubEmail.objects.get(email=email, user_extension=user_extension)
+                except UserSubEmail.DoesNotExist:
+                    pass
+
+                if target_email is not None:
+                    if target_email.primary is not True:
+                        user_sub_email_already_primary = None
+                        try:
+                            user_sub_email_already_primary = UserSubEmail.objects.get(user_extension=user_extension,
+                                                                                      primary=True)
+                        except UserSubEmail.DoesNotExist:
+                            pass
+                        if user_sub_email_already_primary is not None:
+                            user_sub_email_already_primary.primary = False
+                            user_sub_email_already_primary.save()
+
+                        target_email.primary = True
+                        target_email.save()
+
+                        result = None
+                        result['success'] = True
+                        result['message'] = messages.EMAIL_GET_PRIMARY
+                        return JsonResponse(result)
+                    else:
+                        result = None
+                        result['success'] = False
+                        result['message'] = messages.EMAIL_ALREADY_PRIMARY
+                        return JsonResponse(result)
+                else:
+                    result = None
+                    result['success'] = False
+                    result['message'] = messages.EMAIL_NOT_EXIST
+                    return JsonResponse(result)
+            else:
+                result = None
+                result['success'] = False
+                result['message'] = messages.BAD_ACCESS
+                return JsonResponse(result)
+        else:
+            result = None
+            result['success'] = False
+            result['message'] = messages.BAD_ACCESS
+            return JsonResponse(result)
+    else:
+        result = None
+        result['success'] = False
+        result['message'] = messages.BAD_ACCESS
+        return JsonResponse(result)
+
