@@ -62,7 +62,7 @@ class UserSubEmail(models.Model):
 
 
 @python_2_unicode_compatible
-class UserAuthToken(models.Model):
+class UserEmailAuthToken(models.Model):
 
     email = models.ForeignKey(UserSubEmail, on_delete=models.CASCADE)
 
@@ -73,6 +73,20 @@ class UserAuthToken(models.Model):
 
     def __str__(self):
         return "AuthToken for %s" % self.email
+
+
+@python_2_unicode_compatible
+class UserPasswordAuthToken(models.Model):
+
+    user_extension = models.ForeignKey(UserSubEmail, on_delete=models.CASCADE)
+
+    uid = models.CharField(max_length=64)
+    token = models.CharField(max_length=34)
+
+    created = models.DateTimeField(auto_now_add=True)
+
+    def __str__(self):
+        return "PasswordAuthToken for %s" % self.email
 
 
 @python_2_unicode_compatible

@@ -5,7 +5,7 @@ from .models import *
 admin.site.register(UserExtension)
 admin.site.register(UserSubEmail)
 admin.site.register(UserSubUsername)
-admin.site.register(UserAuthToken)
+admin.site.register(UserEmailAuthToken)
 admin.site.register(UserDeleteTimer)
 
 '''
