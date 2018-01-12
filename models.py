@@ -14,6 +14,8 @@ class UserExtension(models.Model):
 
     verified = models.BooleanField(default=False)
 
+    activated = models.BooleanField(default=False)
+
     updated = models.DateTimeField(auto_now=True)
     created = models.DateTimeField(auto_now_add=True)
 

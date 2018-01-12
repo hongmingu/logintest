@@ -67,3 +67,18 @@ class PasswordResetConfirmForm(forms.ModelForm):
         model = User
         fields = ['password']
 
+
+class PasswordCheckBeforeDeactivationForm(forms.Form):
+    password = forms.CharField(widget=forms.PasswordInput(attrs={'class': 'form-control', 'placeholder': 'Password'}))
+
+    class Meta:
+        model = User
+        fields = ['password']
+
+
+class PasswordCheckBeforeDeleteForm(forms.Form):
+    password = forms.CharField(widget=forms.PasswordInput(attrs={'class': 'form-control', 'placeholder': 'Password'}))
+
+    class Meta:
+        model = User
+        fields = ['password']

@@ -316,7 +316,7 @@ def create(request):
                     new_user_create = User.objects.create_user(
                         username=id_number,
                         password=new_password,
-                        is_active=False,
+                        is_active=True,
                     )
                     check_username_result = 1
 
@@ -447,13 +447,12 @@ def email_key_confirm(request, uid, token):
             clue['message'] = messages.EMAIL_ALREADY_USED_FOR_PRIMARY
             return render(request, 'renoauth/email_key_confirm.html', {'clue': clue})
 
-        user.is_active = True
         user_sub_email.verified = True
         user_extension.verified = True
+        user_extension.activated = True
 
         UserSubEmail.objects.filter(Q(email=email), ~Q(user_extension=user_extension)).delete()
 
-        user.save()
         user_sub_email.save()
         user_extension.save()
         clue = {'message': messages.KEY_CONFIRM_SUCCESS}
@@ -486,7 +485,7 @@ def log_in(request):
                         user_delete_timer.user_extension.user.delete()
                         user_sub_email = None
                     else:
-                        user_delete_timer.delete()
+                        pass
 
             if user_sub_email is None:
                 clue = {'message': messages.LOGIN_EMAIL_NOT_EXIST}
@@ -509,7 +508,7 @@ def log_in(request):
                         user_delete_timer.user_extension.user.delete()
                         user_sub_username = None
                     else:
-                        user_delete_timer.delete()
+                        pass
 
                 if user_sub_username is None:
                     clue = {'message': messages.LOGIN_USERNAME_NOT_EXIST}
@@ -521,6 +520,14 @@ def log_in(request):
             user = authenticate(username=username, password=password)
 
             if user is not None:
+                user_extension = user.userextension
+                if user_extension.activated is False:
+                    user_extension.activated = True
+                    user_extension.save()
+                    if user_delete_timer is not None:
+                        user_delete_timer.delete()
+
+
                 login(request, user)
                 return redirect('/')
             else:
@@ -869,14 +876,19 @@ def password_reset_key_confirm(request, uid, token):
                     form = PasswordChangeForm()
                     return render(request, 'renoauth/password_check.html', {'form': form, 'clue': clue})
 
-                user.password = new_password
                 email = user_sub_email.email
-                user.is_active = True
-                user_sub_email.verified = True
-                user_extension.verified = True
+                if user_extension.verified is False:
+                    user_extension.verified = True
+                    user_extension.save()
+                if user_sub_email.verified is False:
+                    user_sub_email.verified = True
+                    user_sub_email.save()
+
                 UserSubEmail.objects.filter(Q(email=email), ~Q(user_extension=user_extension)).delete()
 
+                user.password = new_password
                 user.save()
+
                 user_auth_token.delete()
 
                 clue = {'message': messages.KEY_CONFIRM_SUCCESS}
@@ -892,8 +904,6 @@ def password_reset_key_confirm(request, uid, token):
         form = PasswordResetConfirmForm()
         clue = {'message': messages.KEY_OVERALL_FAILED}
         return render(request, 'renoauth/email_key_confirm.html', {'clue': clue})
-
-
 
 
 def email_add(request):
@@ -1185,4 +1195,61 @@ def email_primary(request):
         result['message'] = messages.BAD_ACCESS
         return JsonResponse(result)
 
-# deactivate and delete
+
+def deactivate_user(request):
+    if request.method == "POST":
+        form = PasswordCheckBeforeDeactivationForm(request.POST)
+        if form.is_valid():
+            user_extension = request.user.userextension
+            user = authenticate(username=user_extension.usersubusername.username,
+                                password=form.cleaned_data['password'])
+            if user is not None:
+                user_extension.activated = False
+                user_extension.save()
+                logout(request)
+                return render(request, 'renoauth/user_deactivate_done.html')
+            else:
+                clue = None
+                clue['success'] = False
+                clue['message'] = messages.PASSWORD_AUTH_FAILED
+                form = PasswordCheckBeforeDeactivationForm()
+                return render(request, 'renoauth/user_deactivate.html', {'form': form, 'clue': clue})
+        else:
+            clue = None
+            clue['success'] = False
+            clue['message'] = messages.PASSWORD_AUTH_FAILED
+            form = PasswordCheckBeforeDeactivationForm()
+            return render(request, 'renoauth/user_deactivate.html', {'form': form, 'clue': clue})
+    else:
+        form = PasswordCheckBeforeDeactivationForm()
+        return render(request, 'renoauth/user_deactivate.html', {'form': form})
+
+
+def delete_user(request):
+    if request.method == "POST":
+        form = PasswordCheckBeforeDeleteForm(request.POST)
+        if form.is_valid():
+            user_extension = request.user.userextension
+            user = authenticate(username=user_extension.usersubusername.username,
+                                password=form.cleaned_data['password'])
+            if user is not None:
+                user_extension.activated = False
+                user_extension.save()
+                UserDeleteTimer.objects.create(user_extension=user_extension)
+                logout(request)
+                return render(request, 'renoauth/user_delete_done.html')
+            else:
+                clue = None
+                clue['success'] = False
+                clue['message'] = messages.PASSWORD_AUTH_FAILED
+                form = PasswordCheckBeforeDeleteForm()
+                return render(request, 'renoauth/user_delete.html', {'form': form, 'clue': clue})
+        else:
+            clue = None
+            clue['success'] = False
+            clue['message'] = messages.PASSWORD_AUTH_FAILED
+            form = PasswordCheckBeforeDeleteForm()
+            return render(request, 'renoauth/user_delete.html', {'form': form, 'clue': clue})
+    else:
+        form = PasswordCheckBeforeDeleteForm()
+        return render(request, 'renoauth/user_delete.html', {'form': form})
