@@ -22,9 +22,9 @@ from django.utils.encoding import force_text
 from django.utils.http import urlsafe_base64_decode
 from django.utils.timezone import now, timedelta
 import json
-from renoauth import messages
+from renoauth import texts
 from renoauth import banned
-from renoauth import text
+from renoauth import options
 from renoauth import status
 import urllib
 from urllib.parse import urlparse
@@ -46,6 +46,8 @@ def test2(request):
     if request.method == 'POST':
 
         if request.is_ajax():
+            return render(request, 'renoauth/accounts.html')
+
             # time.sleep(2)
             testmodel2 = None
             try:
@@ -196,7 +198,7 @@ def create(request):
         recaptcha_result = json.loads(recaptcha_response.read().decode())
 
         if not recaptcha_result['success']:
-            clue = {'message': messages.RECAPTCHA_CONFIRM_NEED}
+            clue = {'message': texts.RECAPTCHA_CONFIRM_NEED}
             form = UserCreateForm(data)
             return render(request, 'renoauth/create.html', {'form': form, 'clue': clue})
 
@@ -204,12 +206,12 @@ def create(request):
 
         match_ban = [nm for nm in banned.BANNED_USERNAME_LIST if nm in username]
         if match_ban:
-            clue = {'message': messages.USERNAME_BANNED}
+            clue = {'message': texts.USERNAME_BANNED}
             form = UserCreateForm(data)
             return render(request, 'renoauth/create.html', {'form': form, 'clue': clue})
 
         if password in banned.BANNED_PASSWORD_LIST:
-            clue = {'message': messages.PASSWORD_BANNED}
+            clue = {'message': texts.PASSWORD_BANNED}
             form = UserCreateForm(data)
             return render(request, 'renoauth/create.html', {'form': form, 'clue': clue})
 
@@ -239,7 +241,7 @@ def create(request):
             user_sub_email = None
 
         if user_sub_email is not None:
-            clue = {'message': messages.EMAIL_ALREADY_USED}
+            clue = {'message': texts.EMAIL_ALREADY_USED}
             form = UserCreateForm(data)
             return render(request, 'renoauth/create.html', {'form': form, 'clue': clue})
 
@@ -264,42 +266,42 @@ def create(request):
             user_sub_username = None
 
         if user_sub_username is not None:
-            clue = {'message': messages.USERNAME_ALREADY_USED}
+            clue = {'message': texts.USERNAME_ALREADY_USED}
             form = UserCreateForm(data)
             return render(request, 'renoauth/create.html', {'form': form, 'clue': clue})
         # regex check
 
         # In username, more 5 characters and only digits prevent
         if not match_username:
-            clue = {'message': messages.USERNAME_UNAVAILABLE}
+            clue = {'message': texts.USERNAME_UNAVAILABLE}
             form = UserCreateForm(data)
             return render(request, 'renoauth/create.html', {'form': form, 'clue': clue})
         if len(username) > 5 and username.isdigit():
-            clue = {'message': messages.USERNAME_OVER_5_CANNOT_DIGITS}
+            clue = {'message': texts.USERNAME_OVER_5_CANNOT_DIGITS}
             form = UserCreateForm(data)
             return render(request, 'renoauth/create.html', {'form': form, 'clue': clue})
         if len(username) > 30:
-            clue = {'message': messages.USERNAME_LENGTH_OVER_30}
+            clue = {'message': texts.USERNAME_LENGTH_OVER_30}
             form = UserCreateForm(data)
             return render(request, 'renoauth/create.html', {'form': form, 'clue': clue})
         if not match_email:
-            clue = {'message': messages.EMAIL_UNAVAILABLE}
+            clue = {'message': texts.EMAIL_UNAVAILABLE}
             form = UserCreateForm(data)
             return render(request, 'renoauth/create.html', {'form': form, 'clue': clue})
         if len(email) > 255:
-            clue = {'message': messages.EMAIL_LENGTH_OVER_255}
+            clue = {'message': texts.EMAIL_LENGTH_OVER_255}
             form = UserCreateForm(data)
             return render(request, 'renoauth/create.html', {'form': form, 'clue': clue})
         if not password == password_confirm:
-            clue = {'message': messages.PASSWORD_NOT_THE_SAME}
+            clue = {'message': texts.PASSWORD_NOT_THE_SAME}
             form = UserCreateForm(data)
             return render(request, 'renoauth/create.html', {'form': form, 'clue': clue})
         if len(password) > 128 or len(password) < 6:
-            clue = {'message': messages.PASSWORD_LENGTH_PROBLEM}
+            clue = {'message': texts.PASSWORD_LENGTH_PROBLEM}
             form = UserCreateForm(data)
             return render(request, 'renoauth/create.html', {'form': form, 'clue': clue})
         if username == password:
-            clue = {'message': messages.PASSWORD_EQUAL_USERNAME}
+            clue = {'message': texts.PASSWORD_EQUAL_USERNAME}
             form = UserCreateForm(data)
             return render(request, 'renoauth/create.html', {'form': form, 'clue': clue})
 
@@ -324,7 +326,7 @@ def create(request):
                     if 'unique constraint' in e.message:
                         pass
                     else:
-                        clue = {'message': messages.CREATING_USER_EXTRA_ERROR}
+                        clue = {'message': texts.CREATING_USER_EXTRA_ERROR}
                         form = UserCreateForm(data)
                         return render(request, 'renoauth/create.html', {'form': form, 'clue': clue})
 
@@ -376,12 +378,12 @@ def create(request):
                         if 'unique constraint' in e.message:
                             pass
                         else:
-                            clue = {'message': messages.EMAIL_CONFIRMATION_EXTRA_ERROR}
+                            clue = {'message': texts.EMAIL_CONFIRMATION_EXTRA_ERROR}
                             form = UserCreateForm(data)
                             return render(request, 'renoauth/create.html', {'form': form, 'clue': clue})
 
             current_site = get_current_site(request)
-            subject = '[' + current_site.domain + ']' + messages.EMAIL_CONFIRMATION_SUBJECT
+            subject = '[' + current_site.domain + ']' + texts.EMAIL_CONFIRMATION_SUBJECT
 
             message = render_to_string('renoauth/account_activation_email.html', {
                 'user': new_user_sub_username,
@@ -394,7 +396,7 @@ def create(request):
             new_user_sub_email_list = [new_email]
 
             send_mail(
-                subject=subject, message=message, from_email=text.DEFAULT_FROM_EMAIL,
+                subject=subject, message=message, from_email=options.DEFAULT_FROM_EMAIL,
                 recipient_list=new_user_sub_email_list
             )
 
@@ -403,7 +405,7 @@ def create(request):
             return redirect('/')
         else:
             form = UserCreateForm(data)
-            clue = {'message': messages.CREATING_USER_OVERALL_ERROR}
+            clue = {'message': texts.CREATING_USER_OVERALL_ERROR}
             return render(request, 'renoauth/create.html', {'form': form, 'clue': clue})
     else:
         form = UserCreateForm()
@@ -417,12 +419,12 @@ def email_key_confirm(request, uid, token):
     try:
         user_auth_token = UserEmailAuthToken.objects.get(uid=uid, token=token)
     except UserEmailAuthToken.DoesNotExist:
-        clue = {'message': messages.KEY_NOT_EXIST}
+        clue = {'message': texts.KEY_NOT_EXIST}
         return render(request, 'renoauth/email_key_confirm.html', {'clue': clue})
 
     if user_auth_token is not None and not now() - user_auth_token.created <= timedelta(seconds=60*10):
         user_auth_token.delete()
-        clue = {'message': messages.KEY_EXPIRED}
+        clue = {'message': texts.KEY_EXPIRED}
         return render(request, 'renoauth/email_key_confirm.html', {'clue': clue})
 
     try:
@@ -444,7 +446,7 @@ def email_key_confirm(request, uid, token):
         if UserSubEmail.objects.filter(Q(email=email), Q(primary=True), ~Q(user_extension=user_extension)).exists():
             clue = None
             clue['success'] = False
-            clue['message'] = messages.EMAIL_ALREADY_USED_FOR_PRIMARY
+            clue['message'] = texts.EMAIL_ALREADY_USED_FOR_PRIMARY
             return render(request, 'renoauth/email_key_confirm.html', {'clue': clue})
 
         user_sub_email.verified = True
@@ -455,10 +457,10 @@ def email_key_confirm(request, uid, token):
 
         user_sub_email.save()
         user_extension.save()
-        clue = {'message': messages.KEY_CONFIRM_SUCCESS}
+        clue = {'message': texts.KEY_CONFIRM_SUCCESS}
         return render(request, 'renoauth/email_key_confirm.html', {'clue': clue})
     else:
-        clue = {'message': messages.KEY_OVERALL_FAILED}
+        clue = {'message': texts.KEY_OVERALL_FAILED}
         return render(request, 'renoauth/email_key_confirm.html', {'clue': clue})
 
 
@@ -488,7 +490,7 @@ def log_in(request):
                         pass
 
             if user_sub_email is None:
-                clue = {'message': messages.LOGIN_EMAIL_NOT_EXIST}
+                clue = {'message': texts.LOGIN_EMAIL_NOT_EXIST}
                 return render(request, 'main.html', {'form': form, 'clue': clue})
 
         else:
@@ -511,7 +513,7 @@ def log_in(request):
                         pass
 
                 if user_sub_username is None:
-                    clue = {'message': messages.LOGIN_USERNAME_NOT_EXIST}
+                    clue = {'message': texts.LOGIN_USERNAME_NOT_EXIST}
                     return render(request, 'main.html', {'form': form, 'clue': clue})
 
         if form.is_valid():
@@ -536,7 +538,7 @@ def log_in(request):
                     'password': password,
                 }
                 form = LoginForm(data)
-                clue = {'message': messages.LOGIN_FAILED}
+                clue = {'message': texts.LOGIN_FAILED}
                 return render(request, 'main.html', {'form': form, 'clue': clue})
     else:
         form = LoginForm()
@@ -578,7 +580,7 @@ def username_change(request):
                 if exist_user_sub_username is not None:
                     clue = None
                     clue['success'] = False
-                    clue['message'] = messages.USERNAME_ALREADY_USED
+                    clue['message'] = texts.USERNAME_ALREADY_USED
                     return JsonResponse(clue)
 
                 match_username = re.match('^([A-Za-z0-9_](?:(?:[A-Za-z0-9_]|(?:\.(?!\.))){0,28}(?:[A-Za-z0-9_]))?)$',
@@ -586,23 +588,23 @@ def username_change(request):
                 if not match_username:
                     clue = None
                     clue['success'] = False
-                    clue['message'] = messages.USERNAME_UNAVAILABLE
+                    clue['message'] = texts.USERNAME_UNAVAILABLE
                     return JsonResponse(clue)
                 if len(new_username) > 5 and new_username.isdigit():
                     clue = None
                     clue['success'] = False
-                    clue['message'] = messages.USERNAME_OVER_5_CANNOT_DIGITS
+                    clue['message'] = texts.USERNAME_OVER_5_CANNOT_DIGITS
                     return JsonResponse(clue)
                 if len(new_username) > 30:
                     clue = None
                     clue['success'] = False
-                    clue['message'] = messages.USERNAME_LENGTH_OVER_30
+                    clue['message'] = texts.USERNAME_LENGTH_OVER_30
                     return JsonResponse(clue)
                 match_ban = [nm for nm in banned.BANNED_USERNAME_LIST if nm in new_username]
                 if match_ban:
                     clue = None
                     clue['success'] = False
-                    clue['message'] = messages.USERNAME_BANNED
+                    clue['message'] = texts.USERNAME_BANNED
                     return JsonResponse(clue)
 
                 user = request.user
@@ -612,7 +614,7 @@ def username_change(request):
 
                 clue = None
                 clue['success'] = True
-                clue['message'] = messages.USERNAME_CHANGED
+                clue['message'] = texts.USERNAME_CHANGED
                 return JsonResponse(clue)
 
 
@@ -629,17 +631,17 @@ def password_change(request):
                 if not new_password == new_password_confirm:
                     form = PasswordChangeForm()
                     clue = None
-                    clue['message'] = messages.PASSWORD_NOT_THE_SAME
+                    clue['message'] = texts.PASSWORD_NOT_THE_SAME
                     return render(request, 'renoauth/password_check.html', {'form': form, 'clue': clue})
 
                 if len(new_password) > 128 or len(new_password) < 6:
                     clue = None
-                    clue['message'] = messages.PASSWORD_LENGTH_PROBLEM
+                    clue['message'] = texts.PASSWORD_LENGTH_PROBLEM
                     form = PasswordChangeForm()
                     return render(request, 'renoauth/password_check.html', {'form': form, 'clue': clue})
                 if username == new_password:
                     clue = None
-                    clue['message'] = messages.PASSWORD_EQUAL_USERNAME
+                    clue['message'] = texts.PASSWORD_EQUAL_USERNAME
                     form = PasswordChangeForm()
                     return render(request, 'renoauth/password_check.html', {'form': form, 'clue': clue})
 
@@ -650,13 +652,13 @@ def password_change(request):
             else:
                 form = PasswordChangeForm()
                 clue = None
-                clue['message'] = messages.PASSWORD_AUTH_FAILED
+                clue['message'] = texts.PASSWORD_AUTH_FAILED
                 return render(request, 'renoauth/password_check.html', {'form': form, 'clue': clue})
 
         else:
             form = PasswordChangeForm()
             clue = None
-            clue['message'] = messages.PASSWORD_AUTH_FAILED
+            clue['message'] = texts.PASSWORD_AUTH_FAILED
             return render(request, 'renoauth/password_check.html', {'form': form, 'clue': clue})
 
     else:
@@ -679,7 +681,7 @@ def password_reset(request):
 
         if not recaptcha_result['success']:
             clue = None
-            clue['message'] = messages.RECAPTCHA_CONFIRM_NEED
+            clue['message'] = texts.RECAPTCHA_CONFIRM_NEED
             return render(request, 'renoauth/password_reset.html', {'clue': clue})
 
         form = PasswordResetForm(request.POST)
@@ -717,7 +719,7 @@ def password_reset(request):
                             pass
                         else:
 
-                            clue = {'message': messages.PASSWORD_AUTH_TOKEN_EXTRA_ERROR}
+                            clue = {'message': texts.PASSWORD_AUTH_TOKEN_EXTRA_ERROR}
                             return render(request, 'renoauth/accounts_change.html', {'clue': clue})
 
                 user_sub_email_list = [user_sub_email.email]
@@ -730,20 +732,20 @@ def password_reset(request):
                     'token': token,
                 })
 
-                subject = '[' + current_site.domain + ']' + messages.EMAIL_CONFIRMATION_SUBJECT
+                subject = '[' + current_site.domain + ']' + texts.EMAIL_CONFIRMATION_SUBJECT
 
                 send_mail(
-                    subject=subject, message=message, from_email=text.DEFAULT_FROM_EMAIL,
+                    subject=subject, message=message, from_email=options.DEFAULT_FROM_EMAIL,
                     recipient_list=user_sub_email_list
                 )
                 clue = None
                 clue['success'] = True
-                clue['message'] = messages.PASSWORD_RESET_EMAIL_SENT
+                clue['message'] = texts.PASSWORD_RESET_EMAIL_SENT
                 return JsonResponse(clue)
 
             else:
                 clue = None
-                clue['message'] = messages.PASSWORD_RESET_EMAIL_NOT_EXIST
+                clue['message'] = texts.PASSWORD_RESET_EMAIL_NOT_EXIST
                 data = {
                     'username': username,
                 }
@@ -787,7 +789,7 @@ def password_reset(request):
                             pass
                         else:
 
-                            clue = {'message': messages.PASSWORD_AUTH_TOKEN_EXTRA_ERROR}
+                            clue = {'message': texts.PASSWORD_AUTH_TOKEN_EXTRA_ERROR}
                             return render(request, 'renoauth/accounts_change.html', {'clue': clue})
 
                 user_sub_email_list = [user_sub_email.email]
@@ -800,20 +802,20 @@ def password_reset(request):
                     'token': token,
                 })
 
-                subject = '[' + current_site.domain + ']' + messages.EMAIL_CONFIRMATION_SUBJECT
+                subject = '[' + current_site.domain + ']' + texts.EMAIL_CONFIRMATION_SUBJECT
 
                 send_mail(
-                    subject=subject, message=message, from_email=text.DEFAULT_FROM_EMAIL,
+                    subject=subject, message=message, from_email=options.DEFAULT_FROM_EMAIL,
                     recipient_list=user_sub_email_list
                 )
                 clue = None
                 clue['success'] = True
-                clue['message'] = messages.PASSWORD_RESET_EMAIL_SENT
+                clue['message'] = texts.PASSWORD_RESET_EMAIL_SENT
                 return JsonResponse(clue)
 
             else:
                 clue = None
-                clue['message'] = messages.PASSWORD_RESET_USERNAME_NOT_EXIST
+                clue['message'] = texts.PASSWORD_RESET_USERNAME_NOT_EXIST
                 data = {
                     'username': username,
                 }
@@ -829,12 +831,12 @@ def password_reset_key_confirm(request, uid, token):
         try:
             user_auth_token = UserPasswordAuthToken.objects.get(uid=uid, token=token)
         except UserPasswordAuthToken.DoesNotExist:
-            clue = {'message': messages.PASSWORD_RESET_KEY_NOT_EXIST}
+            clue = {'message': texts.PASSWORD_RESET_KEY_NOT_EXIST}
             return render(request, 'renoauth/email_key_confirm.html', {'clue': clue})
 
         if user_auth_token is not None and not now() - user_auth_token.created <= timedelta(seconds=60 * 10):
             user_auth_token.delete()
-            clue = {'message': messages.PASSWORD_RESET_KEY_EXPIRED}
+            clue = {'message': texts.PASSWORD_RESET_KEY_EXPIRED}
             return render(request, 'renoauth/email_key_confirm.html', {'clue': clue})
 
         try:
@@ -862,17 +864,17 @@ def password_reset_key_confirm(request, uid, token):
                 if not new_password == new_password_confirm:
                     form = PasswordChangeForm()
                     clue = None
-                    clue['message'] = messages.PASSWORD_NOT_THE_SAME
+                    clue['message'] = texts.PASSWORD_NOT_THE_SAME
                     return render(request, 'renoauth/password_check.html', {'form': form, 'clue': clue})
 
                 if len(new_password) > 128 or len(new_password) < 6:
                     clue = None
-                    clue['message'] = messages.PASSWORD_LENGTH_PROBLEM
+                    clue['message'] = texts.PASSWORD_LENGTH_PROBLEM
                     form = PasswordChangeForm()
                     return render(request, 'renoauth/password_check.html', {'form': form, 'clue': clue})
                 if username == new_password:
                     clue = None
-                    clue['message'] = messages.PASSWORD_EQUAL_USERNAME
+                    clue['message'] = texts.PASSWORD_EQUAL_USERNAME
                     form = PasswordChangeForm()
                     return render(request, 'renoauth/password_check.html', {'form': form, 'clue': clue})
 
@@ -891,18 +893,18 @@ def password_reset_key_confirm(request, uid, token):
 
                 user_auth_token.delete()
 
-                clue = {'message': messages.KEY_CONFIRM_SUCCESS}
+                clue = {'message': texts.KEY_CONFIRM_SUCCESS}
 
                 return render(request, 'renoauth/password_changed.html')
             else:
-                clue = {'message': messages.KEY_CONFIRM_SUCCESS}
+                clue = {'message': texts.KEY_CONFIRM_SUCCESS}
                 return render(request, 'renoauth/email_key_confirm.html', {'clue': clue})
         else:
-            clue = {'message': messages.KEY_OVERALL_FAILED}
+            clue = {'message': texts.KEY_OVERALL_FAILED}
             return render(request, 'renoauth/email_key_confirm.html', {'clue': clue})
     else:
         form = PasswordResetConfirmForm()
-        clue = {'message': messages.KEY_OVERALL_FAILED}
+        clue = {'message': texts.KEY_OVERALL_FAILED}
         return render(request, 'renoauth/email_key_confirm.html', {'clue': clue})
 
 
@@ -935,20 +937,20 @@ def email_add(request):
             if email_exist is not None:
                 clue = None
                 clue['success'] = False
-                clue['message'] = messages.EMAIL_ALREADY_USED
+                clue['message'] = texts.EMAIL_ALREADY_USED
                 return render(request, 'renoauth/email_add.html', {'form': form, 'clue': clue})
 
             match_email = re.match('[^@]+@[^@]+\.[^@]+', new_email)
             if not match_email:
                 clue = None
                 clue['success'] = False
-                clue['message'] = messages.EMAIL_UNAVAILABLE
+                clue['message'] = texts.EMAIL_UNAVAILABLE
                 return render(request, 'renoauth/email_add.html', {'form': form, 'clue': clue})
 
             if len(new_email) > 255:
                 clue = None
                 clue['success'] = False
-                clue['message'] = messages.EMAIL_LENGTH_OVER_255
+                clue['message'] = texts.EMAIL_LENGTH_OVER_255
                 return render(request, 'renoauth/email_add.html', {'form': form, 'clue': clue})
 
             # Now start the registering
@@ -985,7 +987,7 @@ def email_add(request):
                             else:
                                 clue = None
                                 clue['success'] = False
-                                clue['message'] = messages.EMAIL_CONFIRMATION_EXTRA_ERROR
+                                clue['message'] = texts.EMAIL_CONFIRMATION_EXTRA_ERROR
                                 return render(request, 'renoauth/email_add.html', {'form': form, 'clue': clue})
 
                 new_user_sub_email_list = [new_email]
@@ -998,16 +1000,16 @@ def email_add(request):
                     'token': token,
                 })
 
-                subject = '[' + current_site.domain + ']' + messages.EMAIL_CONFIRMATION_SUBJECT
+                subject = '[' + current_site.domain + ']' + texts.EMAIL_CONFIRMATION_SUBJECT
 
                 send_mail(
-                    subject=subject, message=message, from_email=text.DEFAULT_FROM_EMAIL,
+                    subject=subject, message=message, from_email=options.DEFAULT_FROM_EMAIL,
                     recipient_list=new_user_sub_email_list
                 )
 
                 clue = None
                 clue['success'] = True
-                clue['message'] = messages.EMAIL_ADDED
+                clue['message'] = texts.EMAIL_ADDED
                 return render(request, 'renoauth/email_added.html', {'form': form, 'clue': clue})
 
             else:
@@ -1016,7 +1018,7 @@ def email_add(request):
         else:
             clue = None
             clue['success'] = False
-            clue['message'] = messages.BAD_ACCESS
+            clue['message'] = texts.BAD_ACCESS
             return render(request, 'renoauth/email_add.html', {'form': form, 'clue': clue})
 
     else:
@@ -1061,7 +1063,7 @@ def email_key_send(request):
                             if 'unique constraint' in e.message:
                                 pass
                             else:
-                                clue = {'message': messages.EMAIL_CONFIRMATION_EXTRA_ERROR}
+                                clue = {'message': texts.EMAIL_CONFIRMATION_EXTRA_ERROR}
                                 return render(request, 'renoauth/accounts_change.html', {'clue': clue})
                     new_user_sub_email_list = [new_email]
                     current_site = get_current_site(request)
@@ -1073,31 +1075,31 @@ def email_key_send(request):
                         'token': token,
                     })
 
-                    subject = '[' + current_site.domain + ']' + messages.EMAIL_CONFIRMATION_SUBJECT
+                    subject = '[' + current_site.domain + ']' + texts.EMAIL_CONFIRMATION_SUBJECT
 
                     send_mail(
-                        subject=subject, message=message, from_email=text.DEFAULT_FROM_EMAIL,
+                        subject=subject, message=message, from_email=options.DEFAULT_FROM_EMAIL,
                         recipient_list=new_user_sub_email_list
                     )
                     result = None
                     result['success'] = True
-                    result['message'] = messages.EMAIL_SENT
+                    result['message'] = texts.EMAIL_SENT
                     return JsonResponse(result)
                 else:
                     clue = None
                     clue['success'] = False
-                    clue['message'] = messages.EMAIL_CANNOT_SEND
+                    clue['message'] = texts.EMAIL_CANNOT_SEND
                     return JsonResponse(clue)
             else:
                 result = None
                 result['success'] = False
-                result['message'] = messages.BAD_ACCESS
+                result['message'] = texts.BAD_ACCESS
                 return JsonResponse(result)
 
     else:
         result = None
         result['success'] = False
-        result['message'] = messages.BAD_ACCESS
+        result['message'] = texts.BAD_ACCESS
         return JsonResponse(result)
 
 
@@ -1117,23 +1119,23 @@ def email_remove(request):
                     if target_user_sub_email.primary is True:
                         result = None
                         result['success'] = False
-                        result['message'] = messages.EMAIL_PRIMARY_CANNOT_BE_REMOVED
+                        result['message'] = texts.EMAIL_PRIMARY_CANNOT_BE_REMOVED
                         return JsonResponse(result)
                     else:
                         target_user_sub_email.delete()
                         result = None
                         result['success'] = True
-                        result['message'] = messages.EMAIL_REMOVED
+                        result['message'] = texts.EMAIL_REMOVED
                         return JsonResponse(result)
                 else:
                     result = None
                     result['success'] = False
-                    result['message'] = messages.EMAIL_NOT_EXIST
+                    result['message'] = texts.EMAIL_NOT_EXIST
                     return JsonResponse(result)
     else:
         result = None
         result['success'] = False
-        result['message'] = messages.BAD_ACCESS
+        result['message'] = texts.BAD_ACCESS
         return JsonResponse(result)
 
 
@@ -1167,32 +1169,32 @@ def email_primary(request):
 
                         result = None
                         result['success'] = True
-                        result['message'] = messages.EMAIL_GET_PRIMARY
+                        result['message'] = texts.EMAIL_GET_PRIMARY
                         return JsonResponse(result)
                     else:
                         result = None
                         result['success'] = False
-                        result['message'] = messages.EMAIL_ALREADY_PRIMARY
+                        result['message'] = texts.EMAIL_ALREADY_PRIMARY
                         return JsonResponse(result)
                 else:
                     result = None
                     result['success'] = False
-                    result['message'] = messages.EMAIL_NOT_EXIST
+                    result['message'] = texts.EMAIL_NOT_EXIST
                     return JsonResponse(result)
             else:
                 result = None
                 result['success'] = False
-                result['message'] = messages.BAD_ACCESS
+                result['message'] = texts.BAD_ACCESS
                 return JsonResponse(result)
         else:
             result = None
             result['success'] = False
-            result['message'] = messages.BAD_ACCESS
+            result['message'] = texts.BAD_ACCESS
             return JsonResponse(result)
     else:
         result = None
         result['success'] = False
-        result['message'] = messages.BAD_ACCESS
+        result['message'] = texts.BAD_ACCESS
         return JsonResponse(result)
 
 
@@ -1211,13 +1213,13 @@ def deactivate_user(request):
             else:
                 clue = None
                 clue['success'] = False
-                clue['message'] = messages.PASSWORD_AUTH_FAILED
+                clue['message'] = texts.PASSWORD_AUTH_FAILED
                 form = PasswordCheckBeforeDeactivationForm()
                 return render(request, 'renoauth/user_deactivate.html', {'form': form, 'clue': clue})
         else:
             clue = None
             clue['success'] = False
-            clue['message'] = messages.PASSWORD_AUTH_FAILED
+            clue['message'] = texts.PASSWORD_AUTH_FAILED
             form = PasswordCheckBeforeDeactivationForm()
             return render(request, 'renoauth/user_deactivate.html', {'form': form, 'clue': clue})
     else:
@@ -1241,13 +1243,13 @@ def delete_user(request):
             else:
                 clue = None
                 clue['success'] = False
-                clue['message'] = messages.PASSWORD_AUTH_FAILED
+                clue['message'] = texts.PASSWORD_AUTH_FAILED
                 form = PasswordCheckBeforeDeleteForm()
                 return render(request, 'renoauth/user_delete.html', {'form': form, 'clue': clue})
         else:
             clue = None
             clue['success'] = False
-            clue['message'] = messages.PASSWORD_AUTH_FAILED
+            clue['message'] = texts.PASSWORD_AUTH_FAILED
             form = PasswordCheckBeforeDeleteForm()
             return render(request, 'renoauth/user_delete.html', {'form': form, 'clue': clue})
     else:
